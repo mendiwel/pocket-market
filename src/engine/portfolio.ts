@@ -221,7 +221,7 @@ export function settleChild(child: ChildProfile, family: FamilyGameState): Settl
 
   child.cash = round2(child.cash + summary.allowance + summary.passiveIncome);
   summary.charge = chargeChild(child, summary.expenses, family.assets);
-  addBenchmarkFlow(child, family, summary.allowance + summary.passiveIncome - summary.expenses);
+  addBenchmarkFlow(child, family, summary.allowance - summary.expenses);
 
   child.stats.lastSettledMonth = family.currentMonth;
   // Keep the inbox tidy: drop resolved items older than a few months.
@@ -300,6 +300,7 @@ export function buyAsset(child: ChildProfile, family: FamilyGameState, assetId: 
 }
 
 export function sellAsset(child: ChildProfile, family: FamilyGameState, assetId: string, unitsToSell: number): number {
+  if (unitsToSell <= 0 || !Number.isFinite(unitsToSell)) throw new TradeError('כמות לא תקינה');
   const asset = assetById(family, assetId);
   const held = child.holdings[assetId] ?? 0;
   if (!asset || held <= EPS) throw new TradeError('אין לך יחידות של הנכס הזה');

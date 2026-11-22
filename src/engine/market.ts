@@ -44,7 +44,8 @@ export function chooseMacroEvent(state: FamilyGameState, month: number): MacroEv
     if (state.lastMacroSeverity === 'high') return false;
     return month - state.lastHighSeverityMonth >= 6;
   });
-  const event = pick(rng, candidates);
+  const pool = candidates.length > 0 ? candidates : MACRO_EVENTS;
+  const event = pick(rng, pool);
   state.nextMacroEventMonth = month + randInt(rng, 3, 6);
   state.lastMacroSeverity = event.severity;
   if (event.severity === 'high') state.lastHighSeverityMonth = month;

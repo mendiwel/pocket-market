@@ -10,6 +10,7 @@ service cloud.firestore {
         && request.auth.uid == familyId
         && request.resource.data.ownerUid == familyId
         && request.resource.data.familyId == familyId
+        && request.resource.data.children is list
         && request.resource.data.children.size() <= 20;
     }
 
@@ -19,7 +20,10 @@ service cloud.firestore {
         && request.resource.data.familyId == request.auth.uid
         && request.resource.data.type in ['bug', 'improvement', 'difficulty', 'other']
         && request.resource.data.message is string
+        && request.resource.data.message.size() >= 1
         && request.resource.data.message.size() <= 2000
+        && request.resource.data.metadata is map
+        && request.resource.data.metadata.keys().hasOnly(['appVersion', 'route', 'userAgent'])
         && request.resource.data.keys().hasOnly(['id', 'familyId', 'type', 'message', 'createdAt', 'clientCreatedAt', 'metadata']);
       allow read, update, delete: if false;
     }

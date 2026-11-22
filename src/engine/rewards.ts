@@ -139,8 +139,18 @@ export function achievementById(id: string) {
 
 /** Step 4 — End Turn: XP, streaks, achievements, missions and the turn lock. */
 export function finishTurn(child: ChildProfile, family: FamilyGameState, session: TurnSession, today: string): TurnResult {
+  if (child.lastTurnDate === today) {
+    return {
+      xpGained: 0,
+      newStreak: child.dailyStreak,
+      bonusCash: 0,
+      newAchievements: [],
+      newMissions: [],
+      newCosmetics: [],
+    };
+  }
   const yesterday = addDays(today, -1);
-  const newStreak = child.lastTurnDate === yesterday ? child.dailyStreak + 1 : child.lastTurnDate === today ? child.dailyStreak : 1;
+  const newStreak = child.lastTurnDate === yesterday ? child.dailyStreak + 1 : 1;
   child.dailyStreak = newStreak;
 
   let xp = 10;

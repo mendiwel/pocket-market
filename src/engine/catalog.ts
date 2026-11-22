@@ -13,7 +13,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'סל שיש בו קצת מכל החברות. עולה לאט ובטוח לאורך זמן.',
     category: 'index',
     basePrice: 100,
-    baseDrift: 0.007,
+    baseDrift: 0.002,
     volatility: 0.02,
   },
   {
@@ -23,7 +23,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'מכולת השכונה. אנשים תמיד קונים לחם וחלב — יציב גם בזמנים קשים.',
     category: 'staples',
     basePrice: 60,
-    baseDrift: 0.004,
+    baseDrift: 0.0012,
     volatility: 0.012,
   },
   {
@@ -33,7 +33,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'חברת החשמל והדלק. עולה כשחם מאוד או קר מאוד וכולם מדליקים מזגן.',
     category: 'energy',
     basePrice: 80,
-    baseDrift: 0.005,
+    baseDrift: 0.0015,
     volatility: 0.035,
   },
   {
@@ -43,7 +43,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'מגינים ומטפלים בזמני חירום. עולה כשיש מתיחות, יורדת מעט כשרגוע.',
     category: 'crisis',
     basePrice: 70,
-    baseDrift: 0.004,
+    baseDrift: 0.0012,
     volatility: 0.03,
   },
   {
@@ -53,7 +53,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'גלידריות, מלונות וטיולים. מזנקת בקיץ ובימים שקטים, צונחת בסערות.',
     category: 'leisure_tech',
     basePrice: 90,
-    baseDrift: 0.009,
+    baseDrift: 0.0025,
     volatility: 0.055,
   },
   {
@@ -63,7 +63,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'חברת משחקים. יכולה לגדול מהר — וגם ליפול מהר.',
     category: 'leisure_tech',
     basePrice: 110,
-    baseDrift: 0.01,
+    baseDrift: 0.0028,
     volatility: 0.06,
   },
 ];
