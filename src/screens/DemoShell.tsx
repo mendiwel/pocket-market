@@ -11,9 +11,9 @@ import type { FamilyGameState } from '../types';
 import { GameApp } from './GameApp';
 
 const DEMO_KIDS = [
-  { id: 'demo-early', name: 'יואל', age: 5, avatarId: 'lion', label: 'גיל 5–6', hint: 'הקראה אוטומטית, אייקונים, 3 פעולות' },
-  { id: 'demo-mid', name: 'מלכי', age: 9, avatarId: 'rabbit', label: 'גיל 8–10', hint: 'אחוזים, מעקב, עסקים פסיביים' },
-  { id: 'demo-adv', name: 'צפריר', age: 12, avatarId: 'turtle', label: 'גיל 11–12', hint: 'גרפים, השוואה למדד, פיזור' },
+  { id: 'demo-early', name: 'נועם', age: 6, avatarId: 'lion', label: 'גיל 5–6', hint: 'הקראה אוטומטית, אייקונים, 3 פעולות' },
+  { id: 'demo-mid', name: 'מאיה', age: 9, avatarId: 'rabbit', label: 'גיל 8–10', hint: 'אחוזים, מעקב, עסקים פסיביים' },
+  { id: 'demo-adv', name: 'אורי', age: 12, avatarId: 'turtle', label: 'גיל 11–12', hint: 'גרפים, השוואה למדד, פיזור' },
 ];
 
 /** Builds a demo family with ~8 months of history so charts have something to show. */

@@ -13,7 +13,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'סל שיש בו קצת מכל החברות. עולה לאט ובטוח לאורך זמן.',
     category: 'index',
     basePrice: 100,
-    baseDrift: 0.007,
+    baseDrift: 0.002,
     volatility: 0.02,
   },
   {
@@ -23,7 +23,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'מכולת השכונה. אנשים תמיד קונים לחם וחלב — יציב גם בזמנים קשים.',
     category: 'staples',
     basePrice: 60,
-    baseDrift: 0.004,
+    baseDrift: 0.0012,
     volatility: 0.012,
   },
   {
@@ -33,7 +33,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'חברת החשמל והדלק. עולה כשחם מאוד או קר מאוד וכולם מדליקים מזגן.',
     category: 'energy',
     basePrice: 80,
-    baseDrift: 0.005,
+    baseDrift: 0.0015,
     volatility: 0.035,
   },
   {
@@ -43,7 +43,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'מגינים ומטפלים בזמני חירום. עולה כשיש מתיחות, יורדת מעט כשרגוע.',
     category: 'crisis',
     basePrice: 70,
-    baseDrift: 0.004,
+    baseDrift: 0.0012,
     volatility: 0.03,
   },
   {
@@ -53,7 +53,7 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'גלידריות, מלונות וטיולים. מזנקת בקיץ ובימים שקטים, צונחת בסערות.',
     category: 'leisure_tech',
     basePrice: 90,
-    baseDrift: 0.009,
+    baseDrift: 0.0025,
     volatility: 0.055,
   },
   {
@@ -63,8 +63,28 @@ export const ASSET_SEEDS: AssetSeed[] = [
     descriptionHe: 'חברת משחקים. יכולה לגדול מהר — וגם ליפול מהר.',
     category: 'leisure_tech',
     basePrice: 110,
-    baseDrift: 0.01,
+    baseDrift: 0.0028,
     volatility: 0.06,
+  },
+  {
+    id: 'gold_vault',
+    nameHe: 'מטילי זהב',
+    icon: '🥇',
+    descriptionHe: 'זהב נוצץ בכספת. שומר על הערך שלו כשיש סערות ואינפלציה בעולם.',
+    category: 'crisis',
+    basePrice: 95,
+    baseDrift: 0.0014,
+    volatility: 0.022,
+  },
+  {
+    id: 'neighborhood_realestate',
+    nameHe: 'נדל״ן וחנויות',
+    icon: '🏘️',
+    descriptionHe: 'בניינים וחנויות להשכרה בשכונה. צומח במתינות ויציבות לאורך השנים.',
+    category: 'staples',
+    basePrice: 105,
+    baseDrift: 0.0018,
+    volatility: 0.018,
   },
 ];
 
@@ -112,6 +132,15 @@ export const PASSIVE_ASSETS: PassiveAssetDef[] = [
     baseMonthlyIncome: 38,
     weatherSensitive: true,
   },
+  {
+    id: 'arcade_corner',
+    nameHe: 'מכונת משחקים שכונתית',
+    icon: '🕹️',
+    descriptionHe: 'נכס מניב בקניון השכונתי — ילדים משחקים בכל עונה והמטבעות נכנסים!',
+    price: 800,
+    baseMonthlyIncome: 42,
+    weatherSensitive: false,
+  },
 ];
 
 /** Selling a passive business back returns less than you paid — it is not cash. */
@@ -128,6 +157,10 @@ export const MAX_CATCHUP_MONTHS = 6;
 export const STREAK_BONUS = 20;
 export const MISSION_BONUS = 15;
 export const TURN_MINUTES = 15;
+/** Maximum share of monthly income that can be donated per month (10% = מעשר). */
+export const MAX_DONATION_FRACTION = 0.1;
+/** XP stars awarded per 1 ₪ donated (e.g. 15 ₪ donation -> +15 ⭐). */
+export const DONATION_XP_PER_SHEKEL = 1;
 
 export const DEFAULT_BILLS: Bill[] = [
   { id: 'bill_snack', nameHe: 'ארוחת עשר', icon: '🥪', amount: 15, essential: true },

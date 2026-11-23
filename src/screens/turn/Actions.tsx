@@ -7,9 +7,14 @@ import {
   buyPassive,
   categoriesHeld,
   depositSavings,
+  donateCharity,
+  donatedInCurrentMonth,
   holdingsValue,
+  maxMonthlyDonation,
   monthlyPassiveIncome,
+  monthlyTotalIncome,
   passiveBookValue,
+  remainingMonthlyDonation,
   sellAsset,
   sellPassive,
   toggleWatch,
@@ -50,11 +55,39 @@ export function Actions({
   const [tab, setTab] = useState<Tab>('market');
   const [tradeAsset, setTradeAsset] = useState<string | null>(null);
   const early = child?.tier === 'early';
-  useAutoSpeak(
-    'עכשיו בוחרים: להשקיע בעץ החיסכון, לקנות חלק בחברה, או ללחוץ על הכפתור הגדול ולהישאר פסיביים היום.',
-    early,
-  );
+  const actionsIntroText =
+    'עכשיו בוחרים: להשקיע בעץ החיסכון, לקנות חלק בחברה או בזהב ונדל״ן, או ללחוץ על הכפתור הגדול ולהישאר פסיביים היום.';
+  useAutoSpeak(actionsIntroText, early);
   if (!child) return null;
+
+  const heldCats = categoriesHeld(child, family.assets);
+  const arenaBadges = [
+    { id: 'savings', icon: '🌳', label: 'עץ חיסכון', active: heldCats.includes('savings'), color: 'green' },
+    { id: 'index', icon: '🧺', label: 'סל השוק', active: heldCats.includes('index'), color: 'blue' },
+    { id: 'staples', icon: '🏘️', label: 'נדל״ן ויסוד', active: heldCats.includes('staples'), color: 'gold' },
+    { id: 'energy_crisis', icon: '🥇', label: 'זהב ואנרגיה', active: heldCats.includes('energy') || heldCats.includes('crisis'), color: 'red' },
+    { id: 'passive_tech', icon: '🍋', label: 'עסקים וטכנולוגיה', active: heldCats.includes('passive') || heldCats.includes('leisure_tech'), color: 'purple' },
+  ];
+  const activeArenaCount = arenaBadges.filter((b) => b.active).length;
+
+  const arenaHud = (
+    <div className="arena-hud" aria-label="לוח שליטה בזירות השוק">
+      <div className="arena-hud__head">
+        <strong>🎲 <Term k="sector_control">זירות השוק שלי</Term>: {activeArenaCount} מתוך 5</strong>
+        <span className="arena-hud__goal">
+          {activeArenaCount >= 3 ? '🏆 שלטת ב-3+ זירות! פיזור אלופים!' : 'המטרה: להחזיק לפחות 3 זירות שונות'}
+        </span>
+      </div>
+      <div className="arena-hud__track">
+        {arenaBadges.map((b) => (
+          <div key={b.id} className={`arena-pip arena-pip--${b.color}${b.active ? ' arena-pip--on' : ''}`} title={b.label}>
+            <span className="arena-pip__cube" aria-hidden="true">{b.icon}</span>
+            <span className="arena-pip__name">{b.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   function act(fn: (c: ChildProfile, f: FamilyGameState) => void, okMsg: string, opts: { sold?: boolean } = {}) {
     if (locked) return;
@@ -86,17 +119,88 @@ export function Actions({
     </div>
   );
 
+  function handleDonate(amount: number) {
+    if (locked) return;
+    try {
+      const res = mutate((c, f) => donateCharity(c, f, amount));
+      setSession((s) => ({
+        ...s,
+        donatedAmount: (s.donatedAmount ?? 0) + res.donated,
+        donationXp: (s.donationXp ?? 0) + res.xpEarned,
+      }));
+      const msg = `תרמת ${money(res.donated)} וקיבלת +${res.xpEarned} ⭐ כוכבים! כל הכבוד על הנתינה 💝`;
+      notify(msg);
+      if (early) speak(msg);
+    } catch (e) {
+      notify(e instanceof TradeError ? e.message : 'משהו השתבש');
+    }
+  }
+
+  const maxDonation = maxMonthlyDonation(child, family);
+  const usedDonation = donatedInCurrentMonth(child, family.currentMonth);
+  const remDonation = remainingMonthlyDonation(child, family);
+  const totalMonthIncome = monthlyTotalIncome(child, family);
+  const canDonateMax = Math.min(Math.floor(child.cash), Math.floor(remDonation));
+  const halfDonate = Math.max(1, Math.floor(canDonateMax / 2));
+  const quickDonateAmounts = Array.from(new Set([5, halfDonate, canDonateMax])).filter((v) => v >= 1 && v <= canDonateMax);
+
+  const charityCard = (
+    <article className="card charity-card" aria-label="פינת התרומה והמעשר">
+      <div className="charity-card__head">
+        <div>
+          <h3>
+            💝 <Term k="charity">הפרשת תרומה (עד עשירית)</Term>{' '}
+            <Speak text={`הפרשת תרומה ומעשר. אפשר לתרום החודש עד עשירית מההכנסה החודשית שלך, כלומר עד ${maxDonation} שקלים, ולקבל כוכבי ניקוד על כל שקל!`} />
+          </h3>
+          <p className="muted">
+            ההכנסה החודשית שלך היא <strong>{money(totalMonthIncome)}</strong>, ולכן אפשר להפריש החודש עד עשירית (10%):{' '}
+            <strong>{money(maxDonation)}</strong>. כל 1 ₪ תרומה מזכה ב-<strong>+1 ⭐</strong>!
+          </p>
+        </div>
+        <div className="charity-card__badge">
+          <span>נתרם החודש: <strong>{money(usedDonation)}</strong> / {money(maxDonation)}</span>
+          {child.stats.totalDonated ? <small>סה״כ תרמת עד היום: {money(child.stats.totalDonated)}</small> : null}
+        </div>
+      </div>
+      {remDonation <= 0 ? (
+        <p className="up">🏆 הפרשת את מלוא העשירית החודש ({money(maxDonation)})! כל הכבוד על הלב הרחב!</p>
+      ) : canDonateMax <= 0 ? (
+        <p className="muted">אין כרגע מזומן פנוי לתרומה.</p>
+      ) : (
+        <div className="chips">
+          {quickDonateAmounts.map((v) => (
+            <button
+              key={v}
+              type="button"
+              className="chip chip--charity"
+              disabled={locked}
+              onClick={() => handleDonate(v)}
+            >
+              💝 לתרום {money(v)} (+{v} ⭐)
+            </button>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+
   const asset = tradeAsset ? family.assets.find((a) => a.id === tradeAsset) ?? null : null;
 
   if (early) {
     return (
       <section className="step" aria-labelledby="act-h">
-        <h2 id="act-h" className="step__title">🛒 מה עושים היום?</h2>
+        <h2 id="act-h" className="step__title">
+          🛒 מה עושים היום? <Speak text={actionsIntroText} label="הקראת הוראות" showText />
+        </h2>
         <p className="cash-pill">יש לי במזומן: <strong>{money(child.cash)}</strong></p>
+        {arenaHud}
+        {charityCard}
         {passiveBtn}
         <div className="grid-2">
           <article className="card tree-card">
-            <h3>🌳 עץ החיסכון</h3>
+            <h3>
+              🌳 עץ החיסכון <Speak text={`בעץ החיסכון שלך יש ${Math.round(child.savingsTreeBalance)} שקלים.`} />
+            </h3>
             <SavingsTree balance={child.savingsTreeBalance} streakMonths={child.savingsStreakMonths} size={180} />
             <p className="stat">{money(child.savingsTreeBalance)}</p>
             <div className="chips chips--big">
@@ -115,11 +219,14 @@ export function Actions({
                 const held = child.holdings[a.id] ?? 0;
                 return (
                   <li key={a.id} className="early-asset">
-                    <button type="button" className="early-asset__name" onClick={() => speak(`${a.nameHe}. ${a.descriptionHe}`)}>
-                      <span className="big-emoji" aria-hidden="true">{a.icon}</span>
-                      <span>{a.nameHe}</span>
-                      <span aria-label={ch >= 0 ? 'עלה' : 'ירד'}>{ch >= 0.005 ? '📈' : ch <= -0.005 ? '📉' : '➖'}</span>
-                    </button>
+                    <div className="row">
+                      <button type="button" className="early-asset__name" onClick={() => speak(`${a.nameHe}. ${a.descriptionHe}`)}>
+                        <span className="big-emoji" aria-hidden="true">{a.icon}</span>
+                        <span>{a.nameHe}</span>
+                        <span aria-label={ch >= 0 ? 'עלה' : 'ירד'}>{ch >= 0.005 ? '📈' : ch <= -0.005 ? '📉' : '➖'}</span>
+                      </button>
+                      <Speak text={`${a.nameHe}. ${a.descriptionHe}`} />
+                    </div>
                     {held > 0 && <span className="muted">שלי: {money(held * a.currentPrice)}</span>}
                     <div className="chips">
                       {[20, 50].map((v) => (
@@ -150,8 +257,12 @@ export function Actions({
 
   return (
     <section className="step" aria-labelledby="act-h">
-      <h2 id="act-h" className="step__title">🛒 פעולות</h2>
+      <h2 id="act-h" className="step__title">
+        🛒 פעולות <Speak text={actionsIntroText} label="הקראת פעולות" showText />
+      </h2>
       <p className="cash-pill">מזומן פנוי: <strong>{money(child.cash)}</strong></p>
+      {arenaHud}
+      {charityCard}
       {passiveBtn}
 
       <div className="tabs" role="tablist" aria-label="סוגי פעולות">
@@ -214,30 +325,38 @@ function StockCard({ asset, child, watched, weatherBoost, onOpen, onWatch, month
   const ch = priceChange(asset);
   const held = child.holdings[asset.id] ?? 0;
   const since = child.stats.watchSince[asset.id];
+  const cubes = Math.min(4, Math.ceil((held * asset.currentPrice) / 100));
   return (
-    <li className="stock">
+    <li className={`stock stock--${asset.category}`}>
       <div className="stock__inner">
         <div className="stock__head">
           <span className="stock__icon" aria-hidden="true">{asset.icon}</span>
           <div className="stock__title">
-            <h3>{asset.nameHe}</h3>
-            <span className="tag">{CATEGORY_LABEL_HE[asset.category]}</span>
+            <h3>
+              {asset.nameHe} <Speak text={`${asset.nameHe}. ${asset.descriptionHe}. מחיר נוכחי ${Math.round(asset.currentPrice)} שקלים.`} />
+            </h3>
+            <span className={`tag tag--${asset.category}`}>{CATEGORY_LABEL_HE[asset.category]}</span>
           </div>
           <button type="button" className={`star${watched ? ' star--on' : ''}`} onClick={onWatch} aria-pressed={watched} aria-label={watched ? `להסיר את ${asset.nameHe} ממעקב` : `לעקוב אחרי ${asset.nameHe}`}>
             {watched ? '★' : '☆'}
           </button>
         </div>
         <div className="stock__price">
-          <strong>{money(asset.currentPrice, true)}</strong>
+          <strong className="stock__price-badge">{money(asset.currentPrice, true)}</strong>
           <span className={ch >= 0 ? 'up' : 'down'}>{ch >= 0 ? '▲' : '▼'} {pct(ch)}</span>
         </div>
         <Sparkline values={asset.priceHistory} />
         <div className="stock__meta">
-          {held > 0 && <span>שלי: {money(held * asset.currentPrice)}</span>}
+          {held > 0 && (
+            <span className="stock__owned">
+              שלי: {money(held * asset.currentPrice)}{' '}
+              <span className="stock__cubes" aria-hidden="true">{'🟧'.repeat(cubes)}</span>
+            </span>
+          )}
           {watched && since !== undefined && <span>⭐ במעקב {month - since} תורות</span>}
           {Math.abs(weatherBoost) > 0.004 && <span>{weatherBoost > 0 ? '☀️ מזג האוויר עוזר' : '🌧️ מזג האוויר מקשה'}</span>}
         </div>
-        <button type="button" className="btn btn--sm" onClick={onOpen}>קנייה / מכירה</button>
+        <button type="button" className="btn btn--sm btn--primary" onClick={onOpen}>קנייה / מכירה</button>
       </div>
     </li>
   );
@@ -289,13 +408,15 @@ function BusinessPanel({ child, family, locked, act }: { child: ChildProfile; fa
         {PASSIVE_ASSETS.map((p) => {
           const owned = child.passiveAssets.filter((x) => x === p.id).length;
           return (
-            <li key={p.id} className="stock">
+            <li key={p.id} className="stock stock--passive">
               <div className="stock__inner">
                 <div className="stock__head">
                   <span className="stock__icon" aria-hidden="true">{p.icon}</span>
                   <div className="stock__title">
-                    <h3>{p.nameHe}</h3>
-                    <span className="tag">{p.weatherSensitive ? 'תלוי מזג אוויר' : 'יציב'}</span>
+                    <h3>
+                      {p.nameHe} <Speak text={`${p.nameHe}. ${p.descriptionHe}. מחיר ${p.price} שקלים, מכניס כ-${p.baseMonthlyIncome} שקלים בחודש.`} />
+                    </h3>
+                    <span className="tag tag--passive">{p.weatherSensitive ? 'תלוי מזג אוויר' : 'יציב'}</span>
                   </div>
                 </div>
                 <p className="muted">{p.descriptionHe}</p>

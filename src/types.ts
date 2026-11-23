@@ -86,6 +86,10 @@ export interface ChildStats {
   savingsDeposits: number;
   streakBonusesPaid: number;
   turnsPlayed: number;
+  totalDonated?: number;
+  donatedThisMonth?: number;
+  lastDonationMonth?: number;
+  donationTurns?: number;
 }
 
 export interface ChildProfile {
@@ -94,6 +98,8 @@ export interface ChildProfile {
   age: number;
   tier: AgeTier;
   avatarId: string;
+  /** Optional custom uploaded photo (resized data URL) replacing the emoji avatar. */
+  photoDataUrl?: string | null;
   cash: number;
   savingsTreeBalance: number;
   savingsStreakMonths: number;

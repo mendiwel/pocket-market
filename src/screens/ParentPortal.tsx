@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Avatar } from '../components/Avatar';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Avatar, resizeAvatarFile } from '../components/Avatar';
 import { ACHIEVEMENTS } from '../engine/rewards';
 import { AVATARS } from '../engine/catalog';
 import { money } from '../engine/format';
@@ -96,22 +96,72 @@ function KidsTab() {
   const [name, setName] = useState('');
   const [age, setAge] = useState(8);
   const [avatar, setAvatar] = useState('panda');
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoErr, setPhotoErr] = useState('');
+
+  async function handleKidPhoto(childId: string, e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await resizeAvatarFile(file);
+      update((f) => {
+        const kid = f.children.find((x) => x.id === childId);
+        if (kid) kid.photoDataUrl = dataUrl;
+      });
+      setPhotoErr('');
+    } catch {
+      setPhotoErr('לא ניתן היה לטעון את התמונה');
+    }
+    e.target.value = '';
+  }
+
+  async function handleNewPhoto(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPhoto(await resizeAvatarFile(file));
+      setPhotoErr('');
+    } catch {
+      setPhotoErr('לא ניתן היה לטעון את התמונה');
+    }
+    e.target.value = '';
+  }
 
   function add(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     update((f) => {
-      f.children.push(createChild({ id: uid('kid'), name: name.trim(), age, avatarId: avatar }, f.currentMonth));
+      f.children.push(createChild({ id: uid('kid'), name: name.trim(), age, avatarId: avatar, photoDataUrl: photo }, f.currentMonth));
     });
     setName('');
+    setPhoto(null);
   }
 
   return (
     <div className="stack">
+      {photoErr && <p className="down" role="alert">{photoErr}</p>}
       <ul className="parent-kids">
         {family.children.map((c) => (
           <li key={c.id} className="card parent-kid">
-            <Avatar avatarId={c.avatarId} size={56} />
+            <div className="avatar-upload">
+              <Avatar avatarId={c.avatarId} photoDataUrl={c.photoDataUrl} size={64} />
+              <div className="avatar-upload__actions">
+                <label className="btn btn--sm">
+                  📷 תמונה
+                  <input type="file" accept="image/*" hidden onChange={(e) => handleKidPhoto(c.id, e)} />
+                </label>
+                {c.photoDataUrl && (
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--ghost"
+                    onClick={() => update((f) => void (f.children.find((x) => x.id === c.id)!.photoDataUrl = null))}
+                    title="חזרה לדמות המצוירת"
+                  >
+                    איפוס תמונה
+                  </button>
+                )}
+              </div>
+            </div>
             <label className="field">
               <span>שם</span>
               <input value={c.name} onChange={(e) => update((f) => void (f.children.find((x) => x.id === c.id)!.name = e.target.value))} />
@@ -159,14 +209,28 @@ function KidsTab() {
           <span className="muted">מסלול: {TIER_LABEL_HE[tierForAge(age)]}</span>
         </div>
         <fieldset className="avatar-pick">
-          <legend>דמות</legend>
+          <legend>דמות או תמונה אישית</legend>
           {Object.keys(AVATARS).map((id) => (
             <label key={id} className="avatar-pick__opt">
-              <input type="radio" name="avatar" value={id} checked={avatar === id} onChange={() => setAvatar(id)} />
+              <input type="radio" name="avatar" value={id} checked={!photo && avatar === id} onChange={() => { setAvatar(id); setPhoto(null); }} />
               <Avatar avatarId={id} size={44} />
             </label>
           ))}
         </fieldset>
+        <div className="row row--wrap" style={{ marginBlockEnd: 12 }}>
+          <label className="btn btn--sm">
+            📷 העלאת תמונה של הילד/ה
+            <input type="file" accept="image/*" hidden onChange={handleNewPhoto} />
+          </label>
+          {photo && (
+            <>
+              <Avatar avatarId={avatar} photoDataUrl={photo} size={52} />
+              <button type="button" className="btn btn--sm btn--ghost" onClick={() => setPhoto(null)}>
+                הסרת תמונה
+              </button>
+            </>
+          )}
+        </div>
         <button type="submit" className="btn btn--primary">הוספה</button>
       </form>
     </div>
@@ -274,6 +338,7 @@ function AnalyticsTab() {
             <th scope="col">שווי כולל</th>
             <th scope="col">מזומן</th>
             <th scope="col">עץ חיסכון</th>
+            <th scope="col">תרומות 💝</th>
             <th scope="col">פיזור</th>
             <th scope="col">רצף</th>
             <th scope="col">⭐</th>
@@ -287,6 +352,7 @@ function AnalyticsTab() {
               <td>{money(netWorth(c, family.assets))}</td>
               <td>{money(c.cash)}</td>
               <td>{money(c.savingsTreeBalance)}</td>
+              <td>{money(c.stats.totalDonated ?? 0)}</td>
               <td>{categoriesHeld(c, family.assets).length} סוגים</td>
               <td>🔥 {c.dailyStreak}</td>
               <td>{c.xp}</td>

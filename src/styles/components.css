@@ -47,20 +47,61 @@
 }
 
 .speak-btn {
-  border: none;
-  background: var(--brand-soft);
-  border-radius: 50%;
-  inline-size: 36px;
-  block-size: 36px;
-  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 2px solid #f59e0b;
+  background: linear-gradient(135deg, #ffe566, #ffd426);
+  color: #17233b;
+  border-radius: 999px;
+  min-inline-size: 38px;
+  block-size: 38px;
+  padding-inline: 8px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
   cursor: pointer;
   vertical-align: middle;
   flex-shrink: 0;
+  box-shadow: 0 3px 0 #d97706;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.speak-btn--pill {
+  padding-inline: 14px;
+}
+.speak-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #fff08a, #ffd426);
+}
+.speak-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #d97706;
+}
+.speak-btn--active {
+  background: linear-gradient(135deg, #ff6b4a, #e53935);
+  border-color: #b91c1c;
+  color: #ffffff;
+  box-shadow: 0 3px 0 #991b1b;
+  animation: pulse-speak 1s infinite alternate;
+}
+.speak-btn__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.speak-btn__label {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+@keyframes pulse-speak {
+  from { transform: scale(1); }
+  to { transform: scale(1.06); }
 }
 
 .card {
   background: var(--surface);
   border-radius: var(--radius);
+  border: 2px solid var(--grid);
   padding: 18px;
   box-shadow: var(--shadow);
 }
@@ -68,11 +109,20 @@
 .tag {
   display: inline-block;
   font-size: 0.8rem;
-  padding-inline: 8px;
+  font-weight: 700;
+  padding-inline: 10px;
+  padding-block: 2px;
   border-radius: 999px;
   background: var(--surface-2);
-  color: var(--muted);
+  color: var(--ink);
+  border: 1px solid rgb(0 0 0 / 0.08);
 }
+.tag--index { background: #dbeafe; color: #1e40af; }
+.tag--staples { background: #fef3c7; color: #92400e; }
+.tag--energy { background: #ffedd5; color: #c2410c; }
+.tag--crisis { background: #fde68a; color: #78350f; }
+.tag--leisure_tech { background: #f3e8ff; color: #6b21a8; }
+.tag--passive { background: #d1fae5; color: #065f46; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -273,11 +323,30 @@
   border-radius: 50%;
   flex-shrink: 0;
   line-height: 1;
+  border: 3px solid rgb(255 255 255 / 0.85);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.12);
+}
+.avatar__img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 .avatar__acc {
   position: absolute;
   inset-block-start: -12%;
   inset-inline-end: -8%;
+  z-index: 2;
+}
+.avatar-upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar-upload__actions {
+  display: grid;
+  gap: 4px;
 }
 
 /* ---------- Charts ---------- */

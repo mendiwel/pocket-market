@@ -5,13 +5,19 @@ import { MACRO_EVENTS } from './catalog';
 import { advanceMarketOneMonth, ensureMarketTick, PRICE_CEILING, PRICE_FLOOR, trendPrice } from './market';
 import { getNegotiationProvider } from './negotiation';
 import {
+  benchmarkValue,
   buyAsset,
+  buyPassive,
   categoriesHeld,
   chargeChild,
   depositSavings,
+  donateCharity,
+  maxMonthlyDonation,
   netWorth,
+  remainingMonthlyDonation,
   sellAsset,
   settleChild,
+  TradeError,
   withdrawSavings,
 } from './portfolio';
 import { emptySession, finishTurn } from './rewards';
@@ -100,6 +106,15 @@ describe('market engine', () => {
     expect(ensureMarketTick(f, '2026-02-15', mild('2026-02-15'))).toBe(6);
     expect(f.currentMonth).toBe(7);
   });
+
+  it('keeps asset trend prices within allowance purchasing power after 365 game months (1 real year)', () => {
+    const f = family();
+    for (const a of f.assets) {
+      const priceAfterYear = trendPrice(a, 365);
+      expect(priceAfterYear).toBeLessThan(350);
+      expect(priceAfterYear).toBeGreaterThan(a.basePrice);
+    }
+  });
 });
 
 describe('child economy', () => {
@@ -164,6 +179,59 @@ describe('child economy', () => {
     expect(netWorth(c, f.assets)).toBe(1000);
     expect(() => buyAsset(c, f, 'gaming', 99999)).toThrow();
   });
+
+  it('rejects non-positive units in sellAsset', () => {
+    const f = family();
+    const c = f.children[0];
+    buyAsset(c, f, 'super_shchuna', 120);
+    expect(() => sellAsset(c, f, 'super_shchuna', 0)).toThrow(new TradeError('כמות לא תקינה'));
+    expect(() => sellAsset(c, f, 'super_shchuna', -1)).toThrow(new TradeError('כמות לא תקינה'));
+  });
+
+  it('excludes passive income from benchmark cashflow so internal returns do not inflate the benchmark', () => {
+    const fWithPassive = family('bench-1');
+    const fWithoutPassive = family('bench-1');
+    const c1 = fWithPassive.children[0];
+    const c2 = fWithoutPassive.children[0];
+    buyPassive(c1, 'popcorn_cart'); // costs 550, pays 25/month
+
+    const s1 = settleChild(c1, fWithPassive);
+    const s2 = settleChild(c2, fWithoutPassive);
+    expect(s1.passiveIncome).toBe(25);
+    expect(s2.passiveIncome).toBe(0);
+    expect(c1.stats.benchmarkUnits).toBeCloseTo(c2.stats.benchmarkUnits, 6);
+    expect(benchmarkValue(c1, fWithPassive)).toBe(benchmarkValue(c2, fWithoutPassive));
+  });
+
+  it('awards XP for charity donation and enforces the 10% monthly income cap', () => {
+    const f = family('charity-1');
+    const c = f.children[0];
+    settleChild(c, f);
+    // Monthly allowance is 150 ₪, passive income is 0 -> 10% cap is 15 ₪
+    expect(maxMonthlyDonation(c, f)).toBe(15);
+    expect(remainingMonthlyDonation(c, f)).toBe(15);
+
+    const cashBefore = c.cash;
+    const xpBefore = c.xp;
+    const r1 = donateCharity(c, f, 10);
+    expect(r1).toEqual({ donated: 10, xpEarned: 10, remainingAllowance: 5 });
+    expect(c.cash).toBe(cashBefore - 10);
+    expect(c.xp).toBe(xpBefore + 10);
+
+    // Attempting to donate more than the remaining 5 ₪ in the same month throws
+    expect(() => donateCharity(c, f, 6)).toThrow(TradeError);
+
+    // Donating the remaining 5 ₪ succeeds
+    const r2 = donateCharity(c, f, 5);
+    expect(r2).toEqual({ donated: 5, xpEarned: 5, remainingAllowance: 0 });
+    expect(c.stats.totalDonated).toBe(15);
+
+    // Buying a passive business increases monthly income (150 + 25 = 175 -> 10% floor = 17)
+    buyPassive(c, 'popcorn_cart');
+    runMonths(f, 1);
+    expect(maxMonthlyDonation(c, f)).toBe(17);
+    expect(remainingMonthlyDonation(c, f)).toBe(17);
+  });
 });
 
 describe('rewards', () => {
@@ -191,6 +259,32 @@ describe('rewards', () => {
     finishTurn(c, f, emptySession(), '2026-01-01');
     finishTurn(c, f, emptySession(), '2026-01-02');
     expect(finishTurn(c, f, emptySession(), '2026-01-05').newStreak).toBe(1);
+  });
+
+  it('is idempotent when finishTurn is called twice on the same day (incl. 5-day streak boundary)', () => {
+    const f = family();
+    const c = f.children[0];
+    let day = '2026-01-01';
+    for (let i = 1; i <= 5; i++) {
+      finishTurn(c, f, { ...emptySession(), stayedPassive: true }, day);
+      if (i < 5) day = addDays(day, 1);
+    }
+    const xpAfterFirst = c.xp;
+    const cashAfterFirst = c.cash;
+    const turnsAfterFirst = c.stats.turnsPlayed;
+    const bonusesAfterFirst = c.stats.streakBonusesPaid;
+
+    const repeat = finishTurn(c, f, { ...emptySession(), stayedPassive: true, readNews: true }, day);
+    expect(repeat.xpGained).toBe(0);
+    expect(repeat.bonusCash).toBe(0);
+    expect(repeat.newStreak).toBe(5);
+    expect(repeat.newAchievements).toEqual([]);
+    expect(repeat.newMissions).toEqual([]);
+    expect(repeat.newCosmetics).toEqual([]);
+    expect(c.xp).toBe(xpAfterFirst);
+    expect(c.cash).toBe(cashAfterFirst);
+    expect(c.stats.turnsPlayed).toBe(turnsAfterFirst);
+    expect(c.stats.streakBonusesPaid).toBe(bonusesAfterFirst);
   });
 });
 

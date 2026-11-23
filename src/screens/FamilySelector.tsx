@@ -1,4 +1,5 @@
 import { Avatar } from '../components/Avatar';
+import { Speak } from '../components/Speak';
 import { TIER_LABEL_HE } from '../engine/seed';
 import { netWorth } from '../engine/portfolio';
 import { money } from '../engine/format';
@@ -10,11 +11,15 @@ export function FamilySelector({ onPick, onParent }: { onPick: (childId: string)
   const { family, today, mode } = useGame();
   const wl = WEATHER_LABEL[family.weather.condition];
   const allDone = family.children.length > 0 && family.children.every((c) => c.lastTurnDate === today);
+  const welcomeSpeech = `משפחת ${family.familyNameHe}, מי משחק עכשיו? חודש ${family.currentMonth} בשוק, מזג האוויר ${wl.he}, ${family.weather.temperatureC} מעלות.`;
   return (
     <section className="selector" aria-labelledby="sel-h">
       <header className="selector__head">
         <div>
-          <h1 id="sel-h">משפחת {family.familyNameHe} — מי משחק עכשיו?</h1>
+          <h1 id="sel-h">
+            משפחת {family.familyNameHe} — מי משחק עכשיו?{' '}
+            <Speak text={welcomeSpeech} label="הקראת מסך" showText />
+          </h1>
           <p className="muted">
             חודש {family.currentMonth} בשוק · {wl.icon} {family.weather.temperatureC}° {wl.he}
             {family.activeMacroEvent && <> · {family.activeMacroEvent.icon} {family.activeMacroEvent.titleHe}</>}
@@ -36,7 +41,7 @@ export function FamilySelector({ onPick, onParent }: { onPick: (childId: string)
                 onFocus={() => c.tier === 'early' && !done && speak(c.name)}
                 aria-label={`${c.name}, גיל ${c.age}${done ? ', סיים להיום' : ''}`}
               >
-                <Avatar avatarId={c.avatarId} accessory={c.equippedAccessory} size={88} />
+                <Avatar avatarId={c.avatarId} photoDataUrl={c.photoDataUrl} accessory={c.equippedAccessory} size={88} />
                 {done && <span className="kid__badge" aria-hidden="true">✅</span>}
                 <strong className="kid__name">{c.name}</strong>
                 <span className="muted">גיל {c.age} · {TIER_LABEL_HE[c.tier]}</span>
