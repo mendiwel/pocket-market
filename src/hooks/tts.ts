@@ -149,9 +149,12 @@ export function getTtsConfig(): TtsSettings {
 // ---------------------------------------------------------------------------
 // Gemini API Key management (env var or parent-configured localStorage key)
 // ---------------------------------------------------------------------------
-// Hardcoded model constant — only Gemini 3.8 Flash-Lite TTS is ever permitted by this application.
-export const ALLOWED_GEMINI_TTS_MODEL = 'gemini-3.8-flash-lite-tts' as const;
+// Hardcoded model list — only Gemini 3.8 Flash TTS models are ever permitted by this application.
+// Trying flash-tts and flash-lite-tts doubles the Free Tier daily allowance (10 + 10 requests/day)
+// while keeping strict per-model cooldown tracking.
+export const ALLOWED_GEMINI_TTS_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'] as const;
 const MAX_GEMINI_TTS_CHARS = 450;
+const modelCooldownUntil: Record<string, number> = {};
 
 export function sanitizeGeminiApiKey(rawKey: string | undefined | null): string {
   if (!rawKey) return '';
@@ -284,13 +287,6 @@ function tryConsumeQuotaSlot(): boolean {
   saveQuotaState(state);
   notifyListeners();
   return true;
-}
-
-function markQuotaCooldown(durationMs = 5 * 60_000): void {
-  const state = loadQuotaState();
-  state.cooldownUntil = Date.now() + durationMs;
-  saveQuotaState(state);
-  notifyListeners();
 }
 
 export function resetDailyTtsQuotaCount(): void {
@@ -1008,7 +1004,13 @@ async function synthesizeWithGeminiTts(
   gender: ChildGender,
   signal: AbortSignal,
 ): Promise<{ buffer: ArrayBuffer; fromCache: boolean } | null> {
-  const cacheKey = `gemini-3.8-lite:${voice}:${gender}:${cleanText}`;
+  // Strip nikud marks when sending to Gemini 3.8 TTS so the payload stays compact and fast,
+  // while keeping all slash-gender replacements ('תמשכי', 'פסיבית', etc.) and expanded symbols ('שקלים', 'אחוז')!
+  const geminiCleanText = cleanText
+    .replace(/[\u0591-\u05C7]/g, '')
+    .slice(0, MAX_GEMINI_TTS_CHARS);
+
+  const cacheKey = `gemini-3.8:${voice}:${gender}:${geminiCleanText}`;
   const cached = await getCachedAudio(cacheKey);
   if (cached) {
     return { buffer: cached, fromCache: true };
@@ -1016,6 +1018,10 @@ async function synthesizeWithGeminiTts(
 
   const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
+
+  const now = Date.now();
+  const availableModels = ALLOWED_GEMINI_TTS_MODELS.filter((m) => (modelCooldownUntil[m] ?? 0) <= now);
+  if (availableModels.length === 0) return null;
 
   // Enforce strict daily and per-minute quota limits before making a network call
   if (!tryConsumeQuotaSlot()) {
@@ -1027,85 +1033,84 @@ async function synthesizeWithGeminiTts(
       ? 'speaking in Hebrew to a young girl (use feminine second-person Hebrew pronunciation)'
       : 'speaking in Hebrew to a young boy (use masculine second-person Hebrew pronunciation)';
 
-  // Strip nikud marks when sending to Gemini 3.8 TTS so the payload stays compact and fast,
-  // while keeping all slash-gender replacements ('תמשכי', 'פסיבית', etc.) and expanded symbols ('שקלים', 'אחוז')!
-  const geminiCleanText = cleanText
-    .replace(/[\u0591-\u05C7]/g, '')
-    .slice(0, MAX_GEMINI_TTS_CHARS);
-
-  try {
-    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      signal,
-      body: JSON.stringify({
-        model: ALLOWED_GEMINI_TTS_MODEL,
-        store: false,
-        input: [
-          {
-            type: 'user_input',
-            content: [
-              {
-                type: 'text',
-                text: geminiCleanText,
-                annotations: [
-                  {
-                    type: 'speech_metadata',
-                    style: `warm, friendly, cheerful, encouraging storytelling voice for children, natural Israeli Hebrew pronunciation, ${addresseeHint}`,
-                  },
-                ],
-              },
-            ],
+  for (const modelName of availableModels) {
+    try {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        signal,
+        body: JSON.stringify({
+          model: modelName,
+          store: false,
+          input: [
+            {
+              type: 'user_input',
+              content: [
+                {
+                  type: 'text',
+                  text: geminiCleanText,
+                  annotations: [
+                    {
+                      type: 'speech_metadata',
+                      style: `warm, friendly, cheerful, encouraging storytelling voice for children, natural Israeli Hebrew pronunciation, ${addresseeHint}`,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          response_format: {
+            type: 'audio',
+            mime_type: 'audio/wav',
           },
-        ],
-        response_format: {
-          type: 'audio',
-          mime_type: 'audio/wav',
-        },
-        generation_config: {
-          speech_config: [{ voice }],
-        },
-      }),
-    });
+          generation_config: {
+            speech_config: [{ voice }],
+          },
+        }),
+      });
 
-    if (res.status === 429 || res.status === 403) {
-      markQuotaCooldown(5 * 60_000);
-      return null;
-    }
+      if (res.status === 429 || res.status === 403) {
+        // Put this specific model in cooldown for 30 minutes and try the next Gemini 3.8 TTS model
+        modelCooldownUntil[modelName] = Date.now() + 30 * 60_000;
+        continue;
+      }
 
-    if (!res.ok) {
-      return null;
-    }
+      if (!res.ok) {
+        continue;
+      }
 
-    const data = (await res.json()) as {
-      output_audio?: { data?: string };
-      steps?: { type?: string; content?: { type?: string; data?: string }[] }[];
-    };
+      const data = (await res.json()) as {
+        output_audio?: { data?: string };
+        steps?: { type?: string; content?: { type?: string; data?: string }[] }[];
+      };
 
-    let b64 = data.output_audio?.data;
-    if (!b64 && Array.isArray(data.steps)) {
-      for (let i = data.steps.length - 1; i >= 0; i--) {
-        const step = data.steps[i];
-        if (step.type === 'model_output' && Array.isArray(step.content)) {
-          const audioPart = step.content.find((c) => c.type === 'audio' && c.data);
-          if (audioPart?.data) {
-            b64 = audioPart.data;
-            break;
+      let b64 = data.output_audio?.data;
+      if (!b64 && Array.isArray(data.steps)) {
+        for (let i = data.steps.length - 1; i >= 0; i--) {
+          const step = data.steps[i];
+          if (Array.isArray(step.content)) {
+            const audioPart = step.content.find((c) => c.type === 'audio' && c.data);
+            if (audioPart?.data) {
+              b64 = audioPart.data;
+              break;
+            }
           }
         }
       }
-    }
 
-    if (!b64) return null;
-    const buffer = base64ToArrayBuffer(b64);
-    await putCachedAudio(cacheKey, buffer);
-    return { buffer, fromCache: false };
-  } catch {
-    return null;
+      if (!b64) continue;
+      const buffer = base64ToArrayBuffer(b64);
+      await putCachedAudio(cacheKey, buffer);
+      return { buffer, fromCache: false };
+    } catch {
+      if (signal.aborted) return null;
+    }
   }
+
+  return null;
 }
 
 function playAudioBuffer(buffer: ArrayBuffer, originalKey: string, sessionId: number, onFallback: () => void): void {
@@ -1192,7 +1197,7 @@ function applyAudioPitchProfile(audio: HTMLAudioElement, style = getActiveStyleP
   audio.playbackRate = style.cloudPlaybackRate;
 }
 
-function playOnlineHebrewStream(cleanText: string, originalKey: string, sessionId: number, allowSapiFallback = true): void {
+function playOnlineHebrewStream(cleanText: string, originalKey: string, sessionId: number): void {
   if (currentSessionId !== sessionId || currentText !== originalKey) return;
   const chunks = splitChunks(cleanText, 175);
   let idx = 0;
@@ -1211,7 +1216,11 @@ function playOnlineHebrewStream(cleanText: string, originalKey: string, sessionI
     const chunk = chunks[idx++];
     const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=iw&q=${encodeURIComponent(chunk)}`;
     cleanupAudioElement();
-    const audio = new Audio(url);
+    const audio = new Audio();
+    // Critical: Google Translate TTS returns HTTP 404 if the browser sends a Referer header!
+    // Setting referrerpolicy = 'no-referrer' before setting src ensures HTTP 200 OK in both dev and prod.
+    audio.setAttribute('referrerpolicy', 'no-referrer');
+    audio.src = url;
     currentAudio = audio;
     applyAudioPitchProfile(audio, style);
     audio.onended = () => {
@@ -1220,9 +1229,13 @@ function playOnlineHebrewStream(cleanText: string, originalKey: string, sessionI
     };
     audio.onerror = () => {
       if (currentSessionId !== sessionId) return;
-      if (allowSapiFallback && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      // Never fall back to unvoiced SpeechSynthesisUtterance (which triggers Microsoft Asaf on Windows).
+      // Only fall back to a verified Neural voice if one is installed.
+      const neuralVoice = selectBestHebrewVoice(style.preferredGender);
+      if (neuralVoice && typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const u = new SpeechSynthesisUtterance(chunk);
-        u.lang = 'he-IL';
+        u.voice = neuralVoice;
+        u.lang = neuralVoice.lang || 'he-IL';
         u.rate = style.rate;
         u.pitch = style.pitch;
         u.onend = () => {
@@ -1254,7 +1267,7 @@ function speakWithBrowserVoice(clean: string, rawKey: string, sessionId: number,
   if (currentSessionId !== sessionId || currentText !== rawKey) return;
 
   if (activeTtsSettings.engine === 'cloud_hebrew') {
-    playOnlineHebrewStream(clean, rawKey, sessionId, true);
+    playOnlineHebrewStream(clean, rawKey, sessionId);
     return;
   }
 
@@ -1262,8 +1275,6 @@ function speakWithBrowserVoice(clean: string, rawKey: string, sessionId: number,
   const hasSpeech = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const v = selectBestHebrewVoice(style.preferredGender);
 
-  // If the only installed OS voice is the old metallic Microsoft Asaf AND the user hasn't explicitly pinned Asaf,
-  // check if they prefer the smoother cloud Hebrew voice or apply strong persona pitch/rate shaping.
   if (hasSpeech && v) {
     const synth = window.speechSynthesis;
     try {
@@ -1300,13 +1311,13 @@ function speakWithBrowserVoice(clean: string, rawKey: string, sessionId: number,
       if (currentSessionId !== sessionId) return;
       clearTimers();
       if (currentText === rawKey) {
-        playOnlineHebrewStream(clean, rawKey, sessionId, false);
+        playOnlineHebrewStream(clean, rawKey, sessionId);
       }
     };
 
     synth.speak(u);
   } else {
-    playOnlineHebrewStream(clean, rawKey, sessionId, true);
+    playOnlineHebrewStream(clean, rawKey, sessionId);
   }
 }
 
