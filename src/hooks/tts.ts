@@ -71,7 +71,7 @@ export const BROWSER_VOICE_STYLES: {
   },
 ];
 
-const QUOTA_STORAGE_KEY = 'pocket-market.tts.quota.v1';
+const QUOTA_STORAGE_KEY = 'pocket-market.tts.quota.v2';
 const API_KEY_STORAGE_KEY = 'pocket-market.tts.geminiApiKey.v1';
 const IDB_NAME = 'pocket-market-tts-cache-v1';
 const IDB_STORE = 'audio_wav';
@@ -134,6 +134,10 @@ export function setTtsConfig(settings: Partial<TtsSettings> | undefined): void {
   activeTtsSettings = {
     ...DEFAULT_TTS_SETTINGS,
     ...settings,
+    // Always prioritize Gemini AI + clean online fallback when an embedded API key exists
+    engine: hasEnvGeminiApiKey() ? 'auto' : (settings?.engine ?? DEFAULT_TTS_SETTINGS.engine),
+    dailyQuotaLimit: Math.max(settings?.dailyQuotaLimit ?? 0, DEFAULT_TTS_SETTINGS.dailyQuotaLimit),
+    perMinuteLimit: Math.max(settings?.perMinuteLimit ?? 0, DEFAULT_TTS_SETTINGS.perMinuteLimit),
   };
   notifyListeners();
 }
@@ -783,8 +787,9 @@ function scoreHebrewVoice(v: SpeechSynthesisVoice, preferredGender: 'female' | '
   if (/google/i.test(name)) score += 60;
   if (/hila|avri|carmit/i.test(name)) score += 50;
 
-  // Penalize the old metallic Windows SAPI voice (Microsoft Asaf) if any better voice exists
-  if (/asaf/i.test(name)) score -= 40;
+  // Never use the legacy metallic Windows SAPI voice (Microsoft Asaf) automatically —
+  // prefer the clean online Hebrew TTS stream unless the user explicitly selected Asaf.
+  if (/asaf/i.test(name)) return -1;
 
   // Gender preference matching
   const isFemaleVoice = /hila|carmit|female|נקבה/i.test(name);
@@ -870,7 +875,38 @@ function clearTimers() {
   }
 }
 
+let unlockedAudioContext: AudioContext | null = null;
+
+function ensureAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  if (!unlockedAudioContext) {
+    try {
+      unlockedAudioContext = new Ctx();
+    } catch {
+      return null;
+    }
+  }
+  if (unlockedAudioContext.state === 'suspended') {
+    unlockedAudioContext.resume().catch(() => {});
+  }
+  return unlockedAudioContext;
+}
+
+let currentSourceNode: AudioBufferSourceNode | null = null;
+
 function cleanupAudioElement() {
+  if (currentSourceNode) {
+    try {
+      currentSourceNode.onended = null;
+      currentSourceNode.stop();
+      currentSourceNode.disconnect();
+    } catch {
+      // ignore
+    }
+    currentSourceNode = null;
+  }
   if (currentAudio) {
     try {
       currentAudio.pause();
@@ -991,7 +1027,11 @@ async function synthesizeWithGeminiTts(
       ? 'speaking in Hebrew to a young girl (use feminine second-person Hebrew pronunciation)'
       : 'speaking in Hebrew to a young boy (use masculine second-person Hebrew pronunciation)';
 
-  const boundedText = cleanText.slice(0, MAX_GEMINI_TTS_CHARS);
+  // Strip nikud marks when sending to Gemini 3.8 TTS so the payload stays compact and fast,
+  // while keeping all slash-gender replacements ('תמשכי', 'פסיבית', etc.) and expanded symbols ('שקלים', 'אחוז')!
+  const geminiCleanText = cleanText
+    .replace(/[\u0591-\u05C7]/g, '')
+    .slice(0, MAX_GEMINI_TTS_CHARS);
 
   try {
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
@@ -1010,7 +1050,7 @@ async function synthesizeWithGeminiTts(
             content: [
               {
                 type: 'text',
-                text: boundedText,
+                text: geminiCleanText,
                 annotations: [
                   {
                     type: 'speech_metadata',
@@ -1071,6 +1111,41 @@ async function synthesizeWithGeminiTts(
 function playAudioBuffer(buffer: ArrayBuffer, originalKey: string, sessionId: number, onFallback: () => void): void {
   if (currentText !== originalKey || currentSessionId !== sessionId) return;
   cleanupAudioElement();
+
+  // Play via Web Audio API first (unlocked synchronously on user gesture, so async network delay never triggers autoplay rejection)
+  const ctx = ensureAudioContext();
+  if (ctx) {
+    const copy = buffer.slice(0);
+    ctx
+      .decodeAudioData(copy)
+      .then((audioBuf) => {
+        if (currentText !== originalKey || currentSessionId !== sessionId) return;
+        const src = ctx.createBufferSource();
+        src.buffer = audioBuf;
+        src.connect(ctx.destination);
+        currentSourceNode = src;
+        src.onended = () => {
+          if (currentSessionId !== sessionId) return;
+          currentSourceNode = null;
+          if (currentText === originalKey) {
+            currentText = null;
+            notifyListeners();
+          }
+        };
+        src.start(0);
+      })
+      .catch(() => {
+        if (currentSessionId !== sessionId || currentText !== originalKey) return;
+        playAudioBufferViaElement(buffer, originalKey, sessionId, onFallback);
+      });
+    return;
+  }
+
+  playAudioBufferViaElement(buffer, originalKey, sessionId, onFallback);
+}
+
+function playAudioBufferViaElement(buffer: ArrayBuffer, originalKey: string, sessionId: number, onFallback: () => void): void {
+  if (currentText !== originalKey || currentSessionId !== sessionId) return;
   const blob = new Blob([buffer], { type: 'audio/wav' });
   const url = URL.createObjectURL(blob);
   currentObjectUrl = url;
@@ -1249,6 +1324,8 @@ export function speak(text: string, opts: { rate?: number; gender?: ChildGender 
   stopSpeaking();
   const sessionId = currentSessionId;
   lastSpeakStartAt = Date.now();
+  // Unlock Web Audio API synchronously inside the click gesture
+  ensureAudioContext();
 
   const gender = opts.gender ?? activeChildGender;
   const clean = normalizeHebrewText(raw, gender);

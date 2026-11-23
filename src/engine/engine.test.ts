@@ -344,11 +344,11 @@ describe('Hebrew TTS normalization & quota guard', () => {
     expect(inferGenderFromName('מאיה')).toBe('female');
     expect(inferGenderFromName('נועם')).toBe('male');
 
-    setTtsConfig({ dailyQuotaLimit: 25, perMinuteLimit: 4 });
+    setTtsConfig({ dailyQuotaLimit: 150, perMinuteLimit: 20 });
     resetDailyTtsQuotaCount();
     const status = getTtsQuotaStatus();
-    expect(status.dailyLimit).toBe(25);
-    expect(status.perMinuteLimit).toBe(4);
+    expect(status.dailyLimit).toBe(150);
+    expect(status.perMinuteLimit).toBe(20);
     expect(status.usedToday).toBe(0);
     expect(status.canCallApi).toBe(true);
   });

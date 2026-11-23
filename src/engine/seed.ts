@@ -9,8 +9,8 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   browserVoiceGender: 'female',
   browserVoiceStyle: 'warm_female',
   browserVoiceName: '',
-  dailyQuotaLimit: 40,
-  perMinuteLimit: 5,
+  dailyQuotaLimit: 120,
+  perMinuteLimit: 15,
 };
 
 const FEMALE_NAMES = new Set([
