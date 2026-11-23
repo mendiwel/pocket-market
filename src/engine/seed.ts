@@ -16,7 +16,7 @@ export const TIER_LABEL_HE: Record<AgeTier, string> = {
 };
 
 export function createChild(
-  init: { id: string; name: string; age: number; avatarId: string; tier?: AgeTier },
+  init: { id: string; name: string; age: number; avatarId: string; photoDataUrl?: string | null; tier?: AgeTier },
   currentMonth: number,
 ): ChildProfile {
   const bills = DEFAULT_BILLS.map((b) => ({ ...b }));
@@ -26,6 +26,7 @@ export function createChild(
     age: init.age,
     tier: init.tier ?? tierForAge(init.age),
     avatarId: init.avatarId,
+    photoDataUrl: init.photoDataUrl ?? null,
     cash: STARTING_CASH,
     savingsTreeBalance: 0,
     savingsStreakMonths: 0,
@@ -55,21 +56,25 @@ export function createChild(
       savingsDeposits: 0,
       streakBonusesPaid: 0,
       turnsPlayed: 0,
+      totalDonated: 0,
+      donatedThisMonth: 0,
+      lastDonationMonth: -1,
+      donationTurns: 0,
     },
     lastTurnDate: null,
     netWorthHistory: [{ month: currentMonth, totalValue: STARTING_CASH, indexBenchmark: STARTING_CASH }],
   };
 }
 
-/** Default local seed family (SPEC §3): 7 children across the three tiers. */
+/** Default local seed family (SPEC §3): generic random sample children across the three tiers. */
 export const SEED_CHILDREN = [
-  { id: 'yoel', name: 'יואל', age: 5, avatarId: 'lion' },
-  { id: 'eliyahu', name: 'אליהו', age: 6, avatarId: 'bear' },
-  { id: 'yosef', name: 'יוסף', age: 8, avatarId: 'fox' },
-  { id: 'malki', name: 'מלכי', age: 9, avatarId: 'rabbit' },
-  { id: 'dvora', name: 'דבורה', age: 10, avatarId: 'owl' },
-  { id: 'chani', name: 'חני', age: 11, avatarId: 'koala' },
-  { id: 'tzafrir', name: 'צפריר', age: 12, avatarId: 'turtle' },
+  { id: 'noam', name: 'נועם', age: 6, avatarId: 'lion' },
+  { id: 'tamar', name: 'תמר', age: 7, avatarId: 'bear' },
+  { id: 'itai', name: 'איתי', age: 8, avatarId: 'fox' },
+  { id: 'maya', name: 'מאיה', age: 9, avatarId: 'rabbit' },
+  { id: 'yael', name: 'יעל', age: 10, avatarId: 'owl' },
+  { id: 'roni', name: 'רוני', age: 11, avatarId: 'koala' },
+  { id: 'ori', name: 'אורי', age: 12, avatarId: 'turtle' },
 ];
 
 export function createFamily(opts: {

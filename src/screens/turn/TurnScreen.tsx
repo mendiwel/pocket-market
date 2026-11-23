@@ -80,7 +80,7 @@ export function TurnScreen({ childId, onExit }: { childId: string; onExit: () =>
         <button type="button" className="icon-btn" onClick={onExit} aria-label="חזרה למשפחה">
           🏠
         </button>
-        <Avatar avatarId={child.avatarId} accessory={child.equippedAccessory} size={48} />
+        <Avatar avatarId={child.avatarId} photoDataUrl={child.photoDataUrl} accessory={child.equippedAccessory} size={48} />
         <div className="turn__who">
           <strong>{child.name}</strong>
           <span className="muted">חודש {family.currentMonth} · ⭐ {child.xp} · 🔥 {child.dailyStreak}</span>

@@ -15,10 +15,12 @@ export function Inbox({ childId, onNext, notify }: { childId: string; onNext: ()
   const early = child?.tier === 'early';
   const open = child?.inbox.filter((i) => !i.resolved) ?? [];
 
-  useAutoSpeak(
-    open.length === 0 ? 'אין הודעות חדשות.' : `יש לך ${open.length} הודעות. ${open.map((i) => i.titleHe).join('. ')}`,
-    early,
-  );
+  const inboxSpeakText =
+    open.length === 0
+      ? 'אין הודעות חדשות בתיבת הדואר היום.'
+      : `יש לך ${open.length} הודעות בתיבת הדואר. ${open.map((i) => `${i.titleHe}: ${i.bodyHe}`).join('. ')}`;
+
+  useAutoSpeak(inboxSpeakText, early);
   if (!child) return null;
 
   function pay(item: InboxItem) {
@@ -38,7 +40,9 @@ export function Inbox({ childId, onNext, notify }: { childId: string; onNext: ()
 
   return (
     <section className="step" aria-labelledby="inbox-h">
-      <h2 id="inbox-h" className="step__title">📬 תיבת הדואר</h2>
+      <h2 id="inbox-h" className="step__title">
+        📬 תיבת הדואר <Speak text={inboxSpeakText} label="הקראת הודעות" showText />
+      </h2>
       {open.length === 0 ? (
         <div className="empty">
           <span className="big-emoji" aria-hidden="true">📭</span>
@@ -51,7 +55,7 @@ export function Inbox({ childId, onNext, notify }: { childId: string; onNext: ()
               <span className="big-emoji" aria-hidden="true">{item.icon}</span>
               <div className="inbox__body">
                 <h3>
-                  {item.titleHe} {!early && <Speak text={`${item.titleHe}. ${item.bodyHe}`} />}
+                  {item.titleHe} <Speak text={`${item.titleHe}. ${item.bodyHe}`} />
                 </h3>
                 <p>{item.bodyHe}</p>
                 {item.kind === 'expense' && (

@@ -10,9 +10,18 @@ export interface TurnSession {
   stayedPassive: boolean;
   soldStock: boolean;
   trades: number;
+  donatedAmount?: number;
+  donationXp?: number;
 }
 
-export const emptySession = (): TurnSession => ({ readNews: false, stayedPassive: false, soldStock: false, trades: 0 });
+export const emptySession = (): TurnSession => ({
+  readNews: false,
+  stayedPassive: false,
+  soldStock: false,
+  trades: 0,
+  donatedAmount: 0,
+  donationXp: 0,
+});
 
 interface Ctx {
   child: ChildProfile;
@@ -87,6 +96,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     lessonHe: 'לא שמים את כל הביצים בסל אחד.',
     check: ({ child, family }) => categoriesHeld(child, family.assets).length >= 3,
   },
+  {
+    id: 'generous_heart',
+    icon: '💝',
+    nameHe: 'לב רחב',
+    criteriaHe: 'להפריש תרומה מההכנסה החודשית (עד עשירית)',
+    lessonHe: 'נתינה חכמה ואחראית מעניקה כוכבים ומשמחת אחרים.',
+    check: ({ child }) => (child.stats.totalDonated ?? 0) > 0,
+  },
 ];
 
 export interface MissionDef {
@@ -121,6 +138,12 @@ export const MISSIONS: MissionDef[] = [
     icon: '🧺',
     titleHe: 'להחזיק 3 סוגי נכסים במשך 5 תורות',
     progress: (c) => [Math.min(c.stats.diverseStreak, 5), 5],
+  },
+  {
+    id: 'm_charity',
+    icon: '💝',
+    titleHe: 'להפריש תרומה (עד עשירית מההכנסה) ב-3 חודשים שונים',
+    progress: (c) => [Math.min(c.stats.donationTurns ?? 0, 3), 3],
   },
 ];
 

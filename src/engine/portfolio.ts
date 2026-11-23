@@ -1,8 +1,10 @@
 import type { ChildProfile, FamilyGameState, InboxItem, MarketAsset } from '../types';
 import {
+  DONATION_XP_PER_SHEKEL,
   INDEX_ASSET_ID,
   LIFE_EVENTS,
   MAX_CATCHUP_MONTHS,
+  MAX_DONATION_FRACTION,
   PASSIVE_ASSETS,
   PASSIVE_RESALE_FACTOR,
   SAVINGS_TREE_MONTHLY_RATE,
@@ -355,4 +357,75 @@ export function toggleWatch(child: ChildProfile, family: FamilyGameState, assetI
   child.watchlist.push(assetId);
   child.stats.watchSince[assetId] = family.currentMonth;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Charity / Tithe donation (הפרשת תרומה / מעשר) — capped at 10% of monthly income
+// ---------------------------------------------------------------------------
+
+/** Total monthly income of the child (allowance + passive income). */
+export function monthlyTotalIncome(child: ChildProfile, family: Pick<FamilyGameState, 'settings' | 'weather'>): number {
+  return round2(family.settings.monthlyAllowance + monthlyPassiveIncome(child, family));
+}
+
+/** Maximum donation allowed per game month: 10% (עשירית) of monthly income. */
+export function maxMonthlyDonation(child: ChildProfile, family: Pick<FamilyGameState, 'settings' | 'weather'>): number {
+  return Math.max(1, Math.floor(monthlyTotalIncome(child, family) * MAX_DONATION_FRACTION));
+}
+
+/** How much the child has already donated in the current game month. */
+export function donatedInCurrentMonth(child: ChildProfile, currentMonth: number): number {
+  return child.stats.lastDonationMonth === currentMonth ? (child.stats.donatedThisMonth ?? 0) : 0;
+}
+
+/** Remaining donation allowance for the current game month. */
+export function remainingMonthlyDonation(
+  child: ChildProfile,
+  family: Pick<FamilyGameState, 'settings' | 'weather' | 'currentMonth'>,
+): number {
+  const max = maxMonthlyDonation(child, family);
+  const used = donatedInCurrentMonth(child, family.currentMonth);
+  return Math.max(0, round2(max - used));
+}
+
+/**
+ * Donate `amount` from cash to charity.
+ * Enforces:
+ * - amount > 0 and amount <= child.cash
+ * - total donated in `family.currentMonth` does not exceed 10% of monthly income.
+ * Returns the XP stars earned immediately from this donation.
+ */
+export function donateCharity(
+  child: ChildProfile,
+  family: Pick<FamilyGameState, 'settings' | 'weather' | 'currentMonth'>,
+  amount: number,
+): { donated: number; xpEarned: number; remainingAllowance: number } {
+  amount = round2(amount);
+  if (amount <= 0 || !Number.isFinite(amount)) throw new TradeError('צריך לבחור סכום לתרומה');
+  if (amount > child.cash + EPS) throw new TradeError('אין מספיק מזומן לתרומה');
+
+  const max = maxMonthlyDonation(child, family);
+  const used = donatedInCurrentMonth(child, family.currentMonth);
+  const remaining = round2(max - used);
+  if (amount > remaining + EPS) {
+    throw new TradeError(`אפשר לתרום עד עשירית מההכנסה החודשית (${max} ₪ בחודש)`);
+  }
+
+  child.cash = round2(child.cash - amount);
+  if (child.stats.lastDonationMonth !== family.currentMonth) {
+    child.stats.lastDonationMonth = family.currentMonth;
+    child.stats.donatedThisMonth = 0;
+    child.stats.donationTurns = (child.stats.donationTurns ?? 0) + 1;
+  }
+  child.stats.donatedThisMonth = round2((child.stats.donatedThisMonth ?? 0) + amount);
+  child.stats.totalDonated = round2((child.stats.totalDonated ?? 0) + amount);
+
+  const xpEarned = Math.max(1, Math.round(amount * DONATION_XP_PER_SHEKEL));
+  child.xp += xpEarned;
+
+  return {
+    donated: amount,
+    xpEarned,
+    remainingAllowance: Math.max(0, round2(max - child.stats.donatedThisMonth)),
+  };
 }

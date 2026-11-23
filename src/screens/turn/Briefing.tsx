@@ -46,21 +46,27 @@ export function Briefing({
   return (
     <section className="step" aria-labelledby="briefing-h">
       <h2 id="briefing-h" className="step__title">
-        ☀️ תדריך בוקר {!early && <Speak text={ttsText} />}
+        ☀️ תדריך בוקר <Speak text={ttsText} label="הקראת תדריך" showText />
       </h2>
 
       <div className="grid-3">
         <article className="card card--weather">
           <span className="big-emoji" aria-hidden="true">{wl.icon}</span>
           <div>
-            <h3>מזג האוויר ב{family.settings.locationNameHe}</h3>
+            <h3>
+              מזג האוויר ב{family.settings.locationNameHe}{' '}
+              <Speak text={`מזג האוויר ב${family.settings.locationNameHe}: ${w.temperatureC} מעלות, ${wl.he}. עונה: ${SEASON_LABEL[w.season]}.`} />
+            </h3>
             <p className="stat">{w.temperatureC}° · {wl.he}</p>
             <p className="muted">עונה: {SEASON_LABEL[w.season]}{w.source === 'seasonal-fallback' ? ' · תחזית עונתית' : ''}</p>
           </div>
         </article>
 
-        <article className="card">
-          <h3>{early ? 'הכסף שלי' : 'השינוי בתיק מאתמול'}</h3>
+        <article className="card card--worth">
+          <h3>
+            {early ? 'הכסף שלי' : 'השינוי בתיק מאתמול'}{' '}
+            <Speak text={`השווי שלי הוא ${Math.round(nowValue)} שקלים.`} />
+          </h3>
           <p className="stat">
             <span aria-hidden="true">{mood}</span> {money(nowValue)}
           </p>
@@ -76,8 +82,13 @@ export function Briefing({
           )}
         </article>
 
-        <article className="card">
-          <h3>💰 חודש {family.currentMonth} — מה נכנס ויצא</h3>
+        <article className="card card--ledger">
+          <h3>
+            💰 חודש {family.currentMonth} — מה נכנס ויצא{' '}
+            {summary && summary.months > 0 && (
+              <Speak text={`בחודש ${family.currentMonth} קיבלת דמי כיס ${summary.allowance} שקלים, הכנסה מעסקים ${Math.round(summary.passiveIncome)} שקלים, ריבית בעץ החיסכון ${Math.round(summary.interest)} שקלים, ושילמת הוצאות קבועות ${summary.expenses} שקלים.`} />
+            )}
+          </h3>
           {summary && summary.months > 0 ? (
             <ul className="ledger">
               <li><span>דמי כיס</span><span className="up">+{money(summary.allowance)}</span></li>
@@ -99,16 +110,21 @@ export function Briefing({
       </div>
 
       <article className="card news">
-        <h3>📰 חדשות השוק {!early && <Speak text={news.map((n) => `${n.titleHe}. ${n.descriptionHe}`).join(' ')} />}</h3>
+        <h3>
+          📰 חדשות השוק{' '}
+          {news.length > 0 && <Speak text={news.map((n) => `${n.titleHe}. ${n.descriptionHe}`).join(' ')} label="הקראת כל החדשות" />}
+        </h3>
         {news.length === 0 ? (
           <p className="muted">חודש שקט — אין חדשות מיוחדות.</p>
         ) : (
           <ul className="news__list">
             {news.map((n) => (
-              <li key={n.id}>
+              <li key={n.id} className="news__item">
                 <span className="news__icon" aria-hidden="true">{n.icon}</span>
-                <div>
-                  <strong>{n.titleHe}</strong>
+                <div className="news__body">
+                  <strong>
+                    {n.titleHe} <Speak text={`${n.titleHe}. ${n.descriptionHe}`} />
+                  </strong>
                   {!early && <p>{n.descriptionHe}</p>}
                 </div>
               </li>

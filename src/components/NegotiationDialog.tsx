@@ -63,14 +63,15 @@ export function NegotiationDialog({
           <div key={i} className={`bubble bubble--${m.from}`}>
             {m.from === 'rep' && <span className="bubble__who">🧑‍💼</span>}
             <span>{m.text}</span>
-            {m.from === 'rep' && tier !== 'early' && <Speak text={m.text} />}
+            {m.from === 'rep' && <Speak text={m.text} />}
           </div>
         ))}
       </div>
       {step?.outcome ? (
         <div className={`lesson ${step.outcome.win ? 'lesson--win' : ''}`}>
           <p>
-            <strong>{step.outcome.cancelled ? 'השירות בוטל.' : `החשבון החודשי: ${step.outcome.finalAmount} ₪`}</strong>
+            <strong>{step.outcome.cancelled ? 'השירות בוטל.' : `החשבון החודשי: ${step.outcome.finalAmount} ₪`}</strong>{' '}
+            <Speak text={`${step.outcome.cancelled ? 'השירות בוטל.' : `החשבון החודשי הוא ${step.outcome.finalAmount} שקלים.`} ${step.outcome.lessonHe}`} />
           </p>
           <p>💡 {step.outcome.lessonHe}</p>
           <button type="button" className="btn btn--primary" onClick={() => onDone(step.outcome!)}>

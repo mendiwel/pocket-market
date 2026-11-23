@@ -3,6 +3,7 @@ import { money } from '../../engine/format';
 import { MISSIONS, type TurnResult, type TurnSession } from '../../engine/rewards';
 import { useAutoSpeak } from '../../hooks/tts';
 import type { ChildProfile } from '../../types';
+import { Speak } from '../../components/Speak';
 
 export function Finish({
   child,
@@ -30,12 +31,15 @@ export function Finish({
   if (!result) {
     return (
       <section className="step" aria-labelledby="fin-h">
-        <h2 id="fin-h" className="step__title">✅ סיכום התור</h2>
+        <h2 id="fin-h" className="step__title">
+          ✅ סיכום התור <Speak text={doneText} label="הקראת סיכום" showText />
+        </h2>
         <article className="card">
           <ul className="ledger">
             <li><span>📰 קראתי חדשות</span><span>{session.readNews ? '✔' : '—'}</span></li>
             <li><span>🛒 פעולות שביצעתי</span><span>{session.trades}</span></li>
             <li><span>🧘 נשארתי פסיבי/ת</span><span>{session.stayedPassive ? '✔' : '—'}</span></li>
+            <li><span>💝 תרומה החודש</span><span>{session.donatedAmount ? `${money(session.donatedAmount)} (+${session.donationXp ?? 0} ⭐)` : '—'}</span></li>
             <li><span>💵 מזומן</span><span>{money(child.cash)}</span></li>
           </ul>
         </article>
@@ -49,7 +53,9 @@ export function Finish({
                 return (
                   <li key={m.id} className={done ? 'done' : ''}>
                     <span aria-hidden="true">{m.icon}</span>
-                    <span>{m.titleHe}</span>
+                    <span>
+                      {m.titleHe} <Speak text={m.titleHe} />
+                    </span>
                     <progress max={target} value={done ? target : cur} aria-label={`${cur} מתוך ${target}`} />
                   </li>
                 );
@@ -66,7 +72,9 @@ export function Finish({
 
   return (
     <section className="step celebrate" aria-labelledby="fin-h" aria-live="polite">
-      <h2 id="fin-h" className="step__title">🎉 כל הכבוד, {child.name}!</h2>
+      <h2 id="fin-h" className="step__title">
+        🎉 כל הכבוד, {child.name}! <Speak text={doneText} label="הקראת הישגים" showText />
+      </h2>
       <div className="grid-3">
         <article className="card reward">
           <span className="big-emoji">⭐</span>

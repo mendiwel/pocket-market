@@ -11,7 +11,10 @@ import {
   categoriesHeld,
   chargeChild,
   depositSavings,
+  donateCharity,
+  maxMonthlyDonation,
   netWorth,
+  remainingMonthlyDonation,
   sellAsset,
   settleChild,
   TradeError,
@@ -198,6 +201,36 @@ describe('child economy', () => {
     expect(s2.passiveIncome).toBe(0);
     expect(c1.stats.benchmarkUnits).toBeCloseTo(c2.stats.benchmarkUnits, 6);
     expect(benchmarkValue(c1, fWithPassive)).toBe(benchmarkValue(c2, fWithoutPassive));
+  });
+
+  it('awards XP for charity donation and enforces the 10% monthly income cap', () => {
+    const f = family('charity-1');
+    const c = f.children[0];
+    settleChild(c, f);
+    // Monthly allowance is 150 ₪, passive income is 0 -> 10% cap is 15 ₪
+    expect(maxMonthlyDonation(c, f)).toBe(15);
+    expect(remainingMonthlyDonation(c, f)).toBe(15);
+
+    const cashBefore = c.cash;
+    const xpBefore = c.xp;
+    const r1 = donateCharity(c, f, 10);
+    expect(r1).toEqual({ donated: 10, xpEarned: 10, remainingAllowance: 5 });
+    expect(c.cash).toBe(cashBefore - 10);
+    expect(c.xp).toBe(xpBefore + 10);
+
+    // Attempting to donate more than the remaining 5 ₪ in the same month throws
+    expect(() => donateCharity(c, f, 6)).toThrow(TradeError);
+
+    // Donating the remaining 5 ₪ succeeds
+    const r2 = donateCharity(c, f, 5);
+    expect(r2).toEqual({ donated: 5, xpEarned: 5, remainingAllowance: 0 });
+    expect(c.stats.totalDonated).toBe(15);
+
+    // Buying a passive business increases monthly income (150 + 25 = 175 -> 10% floor = 17)
+    buyPassive(c, 'popcorn_cart');
+    runMonths(f, 1);
+    expect(maxMonthlyDonation(c, f)).toBe(17);
+    expect(remainingMonthlyDonation(c, f)).toBe(17);
   });
 });
 

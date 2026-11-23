@@ -1,13 +1,14 @@
 import { SavingsTree } from '../components/SavingsTree';
 import { Sparkline } from '../components/Charts';
+import { Speak } from '../components/Speak';
 
 const CURRICULUM = [
   { icon: '🌳', title: 'ריבית דריבית', how: 'עץ חיסכון שגדל וצומח מטבעות זהב ככל שלא נוגעים בו.', lesson: 'סבלנות הופכת כסף קטן לכסף גדול.' },
   { icon: '🧘', title: 'השקעה פסיבית וסבלנות', how: 'כפתור "נשארים פסיביים היום" שמזכה בכוכבים, וסל שוק כללי שעולה לאט ובטוח.', lesson: 'לא צריך לקנות ולמכור כל יום.' },
   { icon: '🥅', title: 'קרן חירום', how: 'הפתעות בתיבת הדואר — שרשרת אופניים שנקרעה, ספר שאבד.', lesson: 'מי שאין לו מזומן בצד נאלץ למכור השקעות בזמן רע.' },
-  { icon: '🍋', title: 'הכנסה פסיבית', how: 'קונים דוכן לימונדה או מכונת ברד שמכניסים כסף כל חודש — יותר בימים חמים.', lesson: 'נכסים שעובדים בשבילך.' },
+  { icon: '🍋', title: 'הכנסה פסיבית ונדל״ן', how: 'קונים דוכן לימונדה, מכונת משחקים או חנויות להשכרה שמכניסים כסף כל חודש.', lesson: 'נכסים שעובדים בשבילך.' },
   { icon: '🤝', title: 'מיקוח ותקציב', how: 'שיחה עם נציג שירות שמעלה מחיר: לבקש יפה, להשוות, או... לבלף.', lesson: 'הוצאות קבועות אפשר לשנות — אבל לא מאיימים על מה שבאמת צריך.' },
-  { icon: '🧩', title: 'פיזור', how: 'חברות שמגיבות אחרת למזג האוויר ולחדשות: גלידות, חשמל, מכולת, חירום.', lesson: 'לא שמים את כל הביצים בסל אחד.' },
+  { icon: '🎲', title: 'שליטה ב-5 זירות השוק', how: 'לוח אסטרטגי עם 5 זירות: עץ חיסכון, סל שוק, נדל״ן ויסוד, זהב ואנרגיה, ועסקים.', lesson: 'מי שמפזר ושולט ב-3 זירות או יותר בונה תיק עמיד לכל סערה.' },
 ];
 
 const STEPS = [
@@ -18,14 +19,18 @@ const STEPS = [
 ];
 
 export function Landing() {
+  const heroSpeak =
+    'ברוכים הבאים לשוק הכיס! כסף זה משחק ילדים. משחק אוריינות פיננסית משפחתי לגילאי חמש עד שתים עשרה. חמש עשרה דקות ביום, כל המשפחה בשוק אחד.';
   return (
     <div className="landing">
       <header className="hero">
         <div className="hero__text">
-          <p className="eyebrow">משחק אוריינות פיננסית משפחתי · גילאי 5–12</p>
-          <h1>שוק הכיס</h1>
+          <p className="eyebrow">🎲 משחק לוח פיננסי משפחתי · גילאי 5–12 · כסף זה משחק ילדים!</p>
+          <h1>
+            שוק הכיס <Speak text={heroSpeak} label="הקראה קולית" showText />
+          </h1>
           <p className="hero__lead">
-            15 דקות ביום, בלי טלפון, כל המשפחה בשוק אחד. הילדים לומדים ריבית דריבית, השקעה פסיבית, פיזור, קרן חירום ומיקוח — דרך משחק שמשתנה לפי הגיל.
+            15 דקות ביום, בלי טלפון, כל המשפחה בשוק אחד. הילדים כובשים 5 זירות כלכליות — עץ חיסכון, סל השוק, נדל״ן, זהב ואנרגיה ועסקים מניבים — ולומדים ריבית דריבית, פיזור ומיקוח!
           </p>
           <div className="row row--wrap">
             <a className="btn btn--primary btn--lg" href="#/demo">נסו עכשיו בלי הרשמה ▶</a>
@@ -77,7 +82,7 @@ export function Landing() {
         <div className="gallery">
           <figure className="card preview">
             <div className="mock mock--early" aria-hidden="true">
-              <div className="mock__speaker">🔊 "בוקר טוב יואל! היום שמשי…"</div>
+              <div className="mock__speaker">🔊 "בוקר טוב נועם! היום שמשי…"</div>
               <div className="mock__row"><span className="mock__big">🌳</span><span className="mock__big">🐷</span><span className="mock__big">🍦📈</span></div>
               <div className="mock__btn mock__btn--passive">🧘 נשארים פסיביים</div>
               <div className="mock__row"><span className="mock__chip">🌱 20 ₪</span><span className="mock__chip">🌱 50 ₪</span></div>

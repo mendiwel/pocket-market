@@ -5,6 +5,7 @@ import { priceChange } from '../engine/market';
 import type { AgeTier, MarketAsset } from '../types';
 import { Sparkline } from './Charts';
 import { Modal } from './Modal';
+import { Speak } from './Speak';
 import { Term } from './Term';
 
 export function TradeDialog({
@@ -30,7 +31,7 @@ export function TradeDialog({
   const amt = Math.min(amount, max);
   const heldValue = held * asset.currentPrice;
   return (
-    <Modal open={!!asset} onClose={onClose} title={<>{asset.icon} {asset.nameHe}</>}>
+    <Modal open={!!asset} onClose={onClose} title={<>{asset.icon} {asset.nameHe} <Speak text={`${asset.nameHe}. ${asset.descriptionHe}. מחיר ליחידה: ${Math.round(asset.currentPrice)} שקלים.`} /></>}>
       <p className="muted">{asset.descriptionHe}</p>
       <dl className="facts">
         <div><dt>מחיר ליחידה</dt><dd>{money(asset.currentPrice, true)}</dd></div>
