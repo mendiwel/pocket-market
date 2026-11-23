@@ -23,7 +23,7 @@ import {
 } from '../../engine/portfolio';
 import type { TurnSession } from '../../engine/rewards';
 import { weatherImpacts } from '../../engine/weather';
-import { speak, useAutoSpeak } from '../../hooks/tts';
+import { speak, stopSpeaking, useAutoSpeak } from '../../hooks/tts';
 import { useChild } from '../../hooks/useChild';
 import type { ChildProfile, FamilyGameState, MarketAsset } from '../../types';
 import { PerformanceChart, Sparkline } from '../../components/Charts';
@@ -267,7 +267,17 @@ export function Actions({
 
       <div className="tabs" role="tablist" aria-label="סוגי פעולות">
         {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className="tab" onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className="tab"
+            onClick={() => {
+              stopSpeaking();
+              setTab(t.id);
+            }}
+          >
             {t.label}
           </button>
         ))}

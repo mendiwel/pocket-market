@@ -6,9 +6,10 @@ import { money } from '../engine/format';
 import { categoriesHeld, netWorth } from '../engine/portfolio';
 import { DEFAULT_PIN, hashPin, verifyPin } from '../engine/pin';
 import { uid } from '../engine/rng';
-import { createChild, TIER_LABEL_HE, tierForAge } from '../engine/seed';
+import { createChild, DEFAULT_TTS_SETTINGS, inferGenderFromName, TIER_LABEL_HE, tierForAge } from '../engine/seed';
+import { GEMINI_VOICES, setTtsConfig, speak } from '../hooks/tts';
 import { useGame } from '../hooks/useFamilyGame';
-import type { AgeTier, FeedbackReport } from '../types';
+import type { AgeTier, ChildGender, FeedbackReport, GeminiVoiceName, TtsSettings } from '../types';
 
 declare const __APP_VERSION__: string;
 
@@ -95,6 +96,7 @@ function KidsTab() {
   const { family, update } = useGame();
   const [name, setName] = useState('');
   const [age, setAge] = useState(8);
+  const [gender, setGender] = useState<ChildGender>('male');
   const [avatar, setAvatar] = useState('panda');
   const [photo, setPhoto] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState('');
@@ -131,7 +133,7 @@ function KidsTab() {
     e.preventDefault();
     if (!name.trim()) return;
     update((f) => {
-      f.children.push(createChild({ id: uid('kid'), name: name.trim(), age, avatarId: avatar, photoDataUrl: photo }, f.currentMonth));
+      f.children.push(createChild({ id: uid('kid'), name: name.trim(), age, gender, avatarId: avatar, photoDataUrl: photo }, f.currentMonth));
     });
     setName('');
     setPhoto(null);
@@ -170,6 +172,16 @@ function KidsTab() {
               <span>גיל</span>
               <input type="number" min={4} max={14} value={c.age} onChange={(e) => update((f) => void (f.children.find((x) => x.id === c.id)!.age = Number(e.target.value)))} />
             </label>
+            <label className="field field--narrow">
+              <span>לשון הקראה</span>
+              <select
+                value={c.gender ?? inferGenderFromName(c.name)}
+                onChange={(e) => update((f) => void (f.children.find((x) => x.id === c.id)!.gender = e.target.value as ChildGender))}
+              >
+                <option value="male">בן (זכר)</option>
+                <option value="female">בת (נקבה)</option>
+              </select>
+            </label>
             <label className="field">
               <span>מסלול</span>
               <select value={c.tier} onChange={(e) => update((f) => void (f.children.find((x) => x.id === c.id)!.tier = e.target.value as AgeTier))}>
@@ -200,11 +212,26 @@ function KidsTab() {
         <div className="row row--wrap">
           <label className="field">
             <span>שם</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <input
+              value={name}
+              onChange={(e) => {
+                const v = e.target.value;
+                setName(v);
+                if (v.trim()) setGender(inferGenderFromName(v));
+              }}
+              required
+            />
           </label>
           <label className="field field--narrow">
             <span>גיל</span>
             <input type="number" min={4} max={14} value={age} onChange={(e) => setAge(Number(e.target.value))} />
+          </label>
+          <label className="field field--narrow">
+            <span>לשון הקראה</span>
+            <select value={gender} onChange={(e) => setGender(e.target.value as ChildGender)}>
+              <option value="male">בן (זכר)</option>
+              <option value="female">בת (נקבה)</option>
+            </select>
           </label>
           <span className="muted">מסלול: {TIER_LABEL_HE[tierForAge(age)]}</span>
         </div>
@@ -428,6 +455,15 @@ function SettingsTab() {
   const { family, update, repo, mode } = useGame();
   const [newPin, setNewPin] = useState('');
   const [msg, setMsg] = useState('');
+  const tts: TtsSettings = { ...DEFAULT_TTS_SETTINGS, ...family.settings.tts };
+
+  function updateTts(patch: Partial<TtsSettings>) {
+    const next: TtsSettings = { ...tts, ...patch };
+    setTtsConfig(next);
+    update((f) => {
+      f.settings.tts = next;
+    });
+  }
 
   async function changePin(e: FormEvent) {
     e.preventDefault();
@@ -444,6 +480,44 @@ function SettingsTab() {
   return (
     <div className="stack">
       {msg && <p className="gentle-warn" role="status">{msg}</p>}
+      <article className="card stack">
+        <h2>🎙️ קול והקראה</h2>
+        <div className="row row--wrap" style={{ alignItems: 'flex-end' }}>
+          <label className="field">
+            <span>בחירת קול הקראה</span>
+            <select value={tts.geminiVoice} onChange={(e) => updateTts({ geminiVoice: e.target.value as GeminiVoiceName })}>
+              {GEMINI_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.labelHe} — {v.descHe}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={() =>
+              speak('בוקר טוב! במכולת השכונה המחירים יציבים. קיבלת דמי כיס של מאה וחמישים שקלים, ושילמת הוצאות חמישים שקלים.', {
+                gender: 'male',
+              })
+            }
+          >
+            🔊 השמעת דוגמה (בן)
+          </button>
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={() =>
+              speak('בוקר טוב! במכולת השכונה המחירים יציבים. קיבלת דמי כיס של מאה וחמישים שקלים, ושילמת הוצאות חמישים שקלים.', {
+                gender: 'female',
+              })
+            }
+          >
+            🔊 השמעת דוגמה (בת)
+          </button>
+        </div>
+      </article>
+
       <article className="card">
         <h2>שם המשפחה</h2>
         <label className="field">

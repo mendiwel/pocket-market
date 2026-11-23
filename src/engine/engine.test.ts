@@ -21,7 +21,8 @@ import {
   withdrawSavings,
 } from './portfolio';
 import { emptySession, finishTurn } from './rewards';
-import { createFamily, SEED_CHILDREN } from './seed';
+import { createFamily, inferGenderFromName, SEED_CHILDREN } from './seed';
+import { applyBegedKefetDisambiguation, getTtsQuotaStatus, normalizeHebrewText, resetDailyTtsQuotaCount, setTtsConfig } from '../hooks/tts';
 
 const mild = (date: string): WeatherContext => ({ date, temperatureC: 22, condition: 'mild', season: 'spring', source: 'seasonal-fallback' });
 
@@ -312,5 +313,57 @@ describe('negotiation', () => {
     expect(loyal.outcome).toMatchObject({ finalAmount: 22, win: true });
     const comp = await p.respond(ctx, [{ optionId: 'competitor' }]);
     expect(comp.outcome).toMatchObject({ finalAmount: 18, win: true });
+  });
+});
+
+describe('Hebrew TTS normalization & quota guard', () => {
+  it('vocalizes second-person verbs and slash-forms according to child gender (male vs female)', () => {
+    const raw = 'קיבלת דמי כיס 150 ₪, ושילמת הוצאות. אם לא תמשוך/י מהעץ שלך, תרמת וקיבלת +5 ⭐!';
+    const maleOut = normalizeHebrewText(raw, 'male');
+    const femaleOut = normalizeHebrewText(raw, 'female');
+
+    expect(maleOut).toContain('קִיבַּלְתָּ');
+    expect(maleOut).toContain('וְשִׁילַּמְתָּ');
+    expect(maleOut).toContain('תִּמְשׁוֹךְ');
+    expect(maleOut).toContain('שֶׁלְּךָ');
+    expect(maleOut).toContain('תָּרַמְתָּ');
+
+    expect(femaleOut).toContain('קִיבַּלְתְּ');
+    expect(femaleOut).toContain('וְשִׁילַּמְתְּ');
+    expect(femaleOut).toContain('תִּמְשְׁכִי');
+    expect(femaleOut).toContain('שֶׁלָּךְ');
+    expect(femaleOut).toContain('תָּרַמְתְּ');
+
+    // No raw currency symbols or emojis remain
+    expect(maleOut).not.toContain('₪');
+    expect(maleOut).not.toContain('⭐');
+  });
+
+  it('infers gender from common Israeli child names and enforces quota configuration', () => {
+    expect(inferGenderFromName('תמר')).toBe('female');
+    expect(inferGenderFromName('מאיה')).toBe('female');
+    expect(inferGenderFromName('נועם')).toBe('male');
+
+    setTtsConfig({ dailyQuotaLimit: 25, perMinuteLimit: 4 });
+    resetDailyTtsQuotaCount();
+    const status = getTtsQuotaStatus();
+    expect(status.dailyLimit).toBe(25);
+    expect(status.perMinuteLimit).toBe(4);
+    expect(status.usedToday).toBe(0);
+    expect(status.canCallApi).toBe(true);
+  });
+
+  it('disambiguates Beged-Kefet (ב/כ/פ Dagesh vs. Rafe) words like מכולת, לבית הספר, כסף, בכסף', () => {
+    const out = normalizeHebrewText('מכולת השכונה, המכולת מעלה מחירים, חזרה לבית הספר, כסף בכסף וכוכבים!');
+    // מכולת must have hard Kaf with Dagesh (כּ = \u05DB\u05BC) and Patach on Mem (מַכּוֹלֶת)
+    expect(out).toContain('מַכּוֹלֶת');
+    expect(out).toContain('הַמַּכּוֹלֶת');
+    // לבית הספר must use soft Vet after Lamed (לְבֵית הַסֵּפֶר)
+    expect(out).toContain('לְבֵית הַסֵּפֶר');
+    // כסף at start of word has hard Kaf (כֶּסֶף), after בְ has soft Khaf (בְּכֶסֶף)
+    expect(out).toContain('כֶּסֶף');
+    expect(out).toContain('בְּכֶסֶף');
+    // Unknown word starting with ב/כ/פ automatically gets word-initial Dagesh Kal (דגש קל בראש מילה)
+    expect(applyBegedKefetDisambiguation('פרפרים')).toBe('פּרפרים');
   });
 });

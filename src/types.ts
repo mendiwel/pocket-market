@@ -2,6 +2,9 @@
 // gameplay systems (inbox, missions, stats, settings) need.
 
 export type AgeTier = 'early' | 'intermediate' | 'advanced';
+export type ChildGender = 'male' | 'female';
+export type GeminiVoiceName = 'Aoede' | 'Puck' | 'Leda' | 'Achird' | 'Sulafat' | 'Kore';
+export type BrowserVoiceStyle = 'warm_female' | 'friendly_kid' | 'calm_male' | 'storyteller';
 
 export type WeatherCondition = 'sunny' | 'heatwave' | 'mild' | 'rainy' | 'storm';
 export type Season = 'summer' | 'autumn' | 'winter' | 'spring';
@@ -96,6 +99,7 @@ export interface ChildProfile {
   id: string;
   name: string;
   age: number;
+  gender?: ChildGender;
   tier: AgeTier;
   avatarId: string;
   /** Optional custom uploaded photo (resized data URL) replacing the emoji avatar. */
@@ -120,11 +124,29 @@ export interface ChildProfile {
   netWorthHistory: { month: number; totalValue: number; indexBenchmark: number }[];
 }
 
+export interface TtsSettings {
+  /** 'auto' uses Gemini TTS when API key + quota are available, falling back to enhanced browser Neural TTS. */
+  engine: 'auto' | 'browser' | 'cloud_hebrew';
+  /** Preferred Gemini TTS prebuilt voice (e.g. 'Aoede', 'Puck', 'Leda', 'Sulafat'). */
+  geminiVoice: GeminiVoiceName;
+  /** Preferred browser voice gender when using Web Speech API ('female' = Hila/Carmit, 'male' = Avri). */
+  browserVoiceGender: 'female' | 'male';
+  /** Distinct vocal persona (pitch + rate + voice selection) so switching voices always sounds noticeably different even on 1-voice dev machines. */
+  browserVoiceStyle?: BrowserVoiceStyle;
+  /** Optional exact SpeechSynthesisVoice.name override if the user picks a specific installed OS voice. */
+  browserVoiceName?: string;
+  /** Daily max Gemini TTS API requests across the device (hard cap to never exceed free/allowed quota). */
+  dailyQuotaLimit: number;
+  /** Max Gemini TTS requests per minute (burst protection). */
+  perMinuteLimit: number;
+}
+
 export interface FamilySettings {
   monthlyAllowance: number;
   latitude: number;
   longitude: number;
   locationNameHe: string;
+  tts?: TtsSettings;
 }
 
 export interface FamilyGameState {

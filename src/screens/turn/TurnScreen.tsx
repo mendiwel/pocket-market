@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { money } from '../../engine/format';
 import { netWorth, settleChild, type SettlementSummary } from '../../engine/portfolio';
 import { emptySession, finishTurn, type TurnResult, type TurnSession } from '../../engine/rewards';
-import { speak, stopSpeaking } from '../../hooks/tts';
+import { inferGenderFromName } from '../../engine/seed';
+import { setTtsChildGender, speak, stopSpeaking } from '../../hooks/tts';
 import { useChild } from '../../hooks/useChild';
 import { Avatar } from '../../components/Avatar';
 import { Modal } from '../../components/Modal';
@@ -38,6 +39,13 @@ export function TurnScreen({ childId, onExit }: { childId: string; onExit: () =>
     setSummary(mutate((c, f) => settleChild(c, f)));
   }, [mutate]);
 
+  useEffect(() => {
+    stopSpeaking();
+    if (child) {
+      setTtsChildGender(child.gender ?? inferGenderFromName(child.name));
+    }
+  }, [child]);
+
   useEffect(() => () => stopSpeaking(), []);
 
   const notify = useCallback((msg: string) => {
@@ -56,6 +64,7 @@ export function TurnScreen({ childId, onExit }: { childId: string; onExit: () =>
   const locked = timeUp || !!result;
 
   function finish() {
+    stopSpeaking();
     const r = mutate((c, f) => finishTurn(c, f, session, today));
     setResult(r);
     setTimeUp(false);
@@ -64,6 +73,7 @@ export function TurnScreen({ childId, onExit }: { childId: string; onExit: () =>
 
   function goto(n: number) {
     if (result) return;
+    stopSpeaking();
     // The inbox must be cleared before acting.
     if (n >= 3 && child!.inbox.some((i) => !i.resolved)) {
       setStep(2);

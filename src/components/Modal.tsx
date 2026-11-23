@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { stopSpeaking } from '../hooks/tts';
 
 /** Native <dialog> modal; entry/exit animated with @starting-style in CSS. */
 export function Modal({
@@ -20,8 +21,14 @@ export function Modal({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
+    if (open && !d.open) {
+      stopSpeaking();
+      d.showModal();
+    }
+    if (!open && d.open) {
+      stopSpeaking();
+      d.close();
+    }
   }, [open]);
   return (
     <dialog
