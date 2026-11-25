@@ -366,4 +366,18 @@ describe('Hebrew TTS normalization & quota guard', () => {
     // Unknown word starting with ב/כ/פ automatically gets word-initial Dagesh Kal (דגש קל בראש מילה)
     expect(applyBegedKefetDisambiguation('פרפרים')).toBe('פּרפרים');
   });
+
+  it('encrypts and decrypts the Gemini API key vault only with the valid authorization code', async () => {
+    const { decryptGeminiVault, hashAccessCode, verifyAndUnlockAccessCode } = await import('../components/AccessGate');
+    const hash1 = await hashAccessCode('7704');
+    const hash2 = await hashAccessCode('wrong-code');
+    expect(hash1).toHaveLength(64);
+    expect(hash1).not.toBe(hash2);
+
+    // Wrong code must fail verification
+    expect(await verifyAndUnlockAccessCode('wrong-code')).toBe(false);
+    // Correct default code unlocks and decrypts
+    expect(await verifyAndUnlockAccessCode('7704')).toBe(true);
+    expect(await decryptGeminiVault('wrong-code')).toBeNull();
+  });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getUnlockedRuntimeGeminiKey } from '../components/AccessGate';
 import { DEFAULT_TTS_SETTINGS } from '../engine/seed';
 import type { BrowserVoiceStyle, ChildGender, GeminiVoiceName, TtsSettings } from '../types';
 
@@ -163,6 +164,8 @@ export function sanitizeGeminiApiKey(rawKey: string | undefined | null): string 
 }
 
 export function getGeminiApiKey(): string {
+  const unlockedKey = sanitizeGeminiApiKey(getUnlockedRuntimeGeminiKey());
+  if (unlockedKey) return unlockedKey;
   const envKey = sanitizeGeminiApiKey(import.meta.env?.VITE_GEMINI_API_KEY as string | undefined);
   if (envKey) return envKey;
   if (typeof window === 'undefined') return '';
@@ -186,7 +189,10 @@ export function setCustomGeminiApiKey(key: string): void {
 }
 
 export function hasEnvGeminiApiKey(): boolean {
-  return Boolean(sanitizeGeminiApiKey(import.meta.env?.VITE_GEMINI_API_KEY as string | undefined));
+  return Boolean(
+    sanitizeGeminiApiKey(getUnlockedRuntimeGeminiKey()) ||
+      sanitizeGeminiApiKey(import.meta.env?.VITE_GEMINI_API_KEY as string | undefined),
+  );
 }
 
 // ---------------------------------------------------------------------------
