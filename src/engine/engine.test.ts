@@ -367,17 +367,28 @@ describe('Hebrew TTS normalization & quota guard', () => {
     expect(applyBegedKefetDisambiguation('פרפרים')).toBe('פּרפרים');
   });
 
-  it('encrypts and decrypts the Gemini API key vault only with the valid authorization code', async () => {
-    const { decryptGeminiVault, hashAccessCode, verifyAndUnlockAccessCode } = await import('../components/AccessGate');
-    const hash1 = await hashAccessCode('7704');
-    const hash2 = await hashAccessCode('wrong-code');
+  it('encrypts and decrypts the Gemini API key vault only with the valid authorization code and enforces brute-force lockout', async () => {
+    const {
+      decryptGeminiVault,
+      derivePbkdf2Hex,
+      getRemainingLockoutSeconds,
+      resetAccessLockout,
+      verifyAndUnlockAccessCode,
+    } = await import('../components/AccessGate');
+
+    resetAccessLockout();
+    const salt = '00112233445566778899aabbccddeeff';
+    const hash1 = await derivePbkdf2Hex('PM-7704-K9X2', salt);
+    const hash2 = await derivePbkdf2Hex('wrong-code', salt);
     expect(hash1).toHaveLength(64);
     expect(hash1).not.toBe(hash2);
 
-    // Wrong code must fail verification
+    // Wrong code must fail verification and return null on vault decryption
     expect(await verifyAndUnlockAccessCode('wrong-code')).toBe(false);
-    // Correct default code unlocks and decrypts
-    expect(await verifyAndUnlockAccessCode('7704')).toBe(true);
     expect(await decryptGeminiVault('wrong-code')).toBeNull();
+
+    // Correct high-entropy code unlocks and decrypts
+    expect(await verifyAndUnlockAccessCode('PM-7704-K9X2')).toBe(true);
+    expect(getRemainingLockoutSeconds()).toBe(0);
   });
 });

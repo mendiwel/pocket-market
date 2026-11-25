@@ -3,15 +3,19 @@ import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+const PBKDF2_ITERATIONS = 310_000;
+
 function sanitizeKey(raw: string | undefined): string {
   if (!raw) return '';
   return raw.replace(/["',;\s]/g, '').trim();
 }
 
-function computeAccessCodeHash(code: string): string {
+function computeSaltedAccessVerifier(code: string): string {
   const normalized = code.trim();
   if (!normalized) return '';
-  return crypto.createHash('sha256').update(`pocket-market-access-v1:${normalized}`, 'utf8').digest('hex');
+  const salt = crypto.randomBytes(16);
+  const derived = crypto.pbkdf2Sync(normalized, salt, PBKDF2_ITERATIONS, 32, 'sha256');
+  return `${salt.toString('hex')}:${derived.toString('hex')}`;
 }
 
 function encryptGeminiKeyVault(apiKey: string, accessCode: string): string {
@@ -21,7 +25,7 @@ function encryptGeminiKeyVault(apiKey: string, accessCode: string): string {
 
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
-  const derivedKey = crypto.pbkdf2Sync(cleanCode, salt, 100_000, 32, 'sha256');
+  const derivedKey = crypto.pbkdf2Sync(cleanCode, salt, PBKDF2_ITERATIONS, 32, 'sha256');
   const cipher = crypto.createCipheriv('aes-256-gcm', derivedKey, iv);
   const encrypted = Buffer.concat([cipher.update(cleanKey, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
@@ -32,19 +36,22 @@ function encryptGeminiKeyVault(apiKey: string, accessCode: string): string {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const siteAccessCode = (env.SITE_ACCESS_CODE || env.VITE_SITE_ACCESS_CODE || '7704').trim();
+  const siteAccessCode = (env.SITE_ACCESS_CODE || env.VITE_SITE_ACCESS_CODE || 'PM-7704-K9X2').trim();
   const rawGeminiKey = env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || '';
 
-  const accessCodeHash = computeAccessCodeHash(siteAccessCode);
+  const accessCodeVerifier = computeSaltedAccessVerifier(siteAccessCode);
   const encryptedVault = encryptGeminiKeyVault(rawGeminiKey, siteAccessCode);
 
   return {
     plugins: [react()],
+    build: {
+      sourcemap: false,
+    },
     define: {
       __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
-      __ACCESS_CODE_HASH__: JSON.stringify(accessCodeHash),
+      __ACCESS_CODE_VERIFIER__: JSON.stringify(accessCodeVerifier),
       __ENCRYPTED_GEMINI_VAULT__: JSON.stringify(encryptedVault),
-      // Prevent Vite from embedding the plaintext Gemini key into the client bundle
+      // Never embed the plaintext Gemini key into the client bundle
       'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(''),
     },
     test: {
@@ -53,4 +60,5 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+
 

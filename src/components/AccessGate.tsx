@@ -1,15 +1,20 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 
-// Site-wide authorization gate + AES-256-GCM key vault:
+// Site-wide authorization gate + AES-256-GCM key vault (OWASP 2026 Hardened):
 // 1. Blocks access to the entire application until the user enters the authorization code.
 // 2. The Gemini API key is NEVER stored in plaintext in the production JavaScript bundle;
-//    it is AES-256-GCM encrypted at build time with PBKDF2-SHA256 derived from the access code,
-//    and can only be decrypted in memory after the valid authorization code is entered.
+//    it is AES-256-GCM encrypted at build time with PBKDF2-SHA256 (310,000 iterations + 128-bit random salt)
+//    derived from the access code, and can only be decrypted in memory after the valid authorization code is entered.
+// 3. Enforces brute-force lockout (max 5 attempts before a 15-minute cooldown) and uses sessionStorage by default.
 
 declare const __ENCRYPTED_GEMINI_VAULT__: string;
-declare const __ACCESS_CODE_HASH__: string;
+declare const __ACCESS_CODE_VERIFIER__: string;
 
-const ACCESS_STORAGE_KEY = 'pocket-market.site.accessCode.v1';
+const ACCESS_SESSION_KEY = 'pocket-market.site.accessCode.session.v2';
+const LOCKOUT_STORAGE_KEY = 'pocket-market.site.lockout.v1';
+const PBKDF2_ITERATIONS = 310_000;
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60_000; // 15 minutes
 
 let unlockedRuntimeGeminiKey = '';
 
@@ -35,15 +40,51 @@ function bytesToHex(bytes: Uint8Array): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Constant-time string comparison to prevent timing side-channel attacks. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export function normalizeAccessCode(input: string): string {
   return input.trim();
 }
 
-export async function hashAccessCode(code: string): Promise<string> {
+export async function derivePbkdf2Hex(code: string, saltHex: string): Promise<string> {
   const normalized = normalizeAccessCode(code);
-  const data = new TextEncoder().encode(`pocket-market-access-v1:${normalized}`);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return bytesToHex(new Uint8Array(digest));
+  const salt = hexToBytes(saltHex);
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(normalized),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt as BufferSource,
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+export async function verifySaltedAccessVerifier(code: string, verifierStr?: string): Promise<boolean> {
+  const verifier = verifierStr ?? (typeof __ACCESS_CODE_VERIFIER__ !== 'undefined' ? __ACCESS_CODE_VERIFIER__ : '');
+  if (!verifier || !verifier.includes(':')) return false;
+  const [saltHex, expectedHex] = verifier.split(':');
+  if (!saltHex || !expectedHex) return false;
+
+  const actualHex = await derivePbkdf2Hex(code, saltHex);
+  return constantTimeEqual(actualHex, expectedHex);
 }
 
 /**
@@ -76,7 +117,7 @@ export async function decryptGeminiVault(code: string, vaultStr?: string): Promi
       {
         name: 'PBKDF2',
         salt: salt as BufferSource,
-        iterations: 100_000,
+        iterations: PBKDF2_ITERATIONS,
         hash: 'SHA-256',
       },
       baseKey,
@@ -96,39 +137,105 @@ export async function decryptGeminiVault(code: string, vaultStr?: string): Promi
   }
 }
 
+interface LockoutState {
+  failedAttempts: number;
+  lockedUntil: number;
+}
+
+function loadLockoutState(): LockoutState {
+  if (typeof window === 'undefined') return { failedAttempts: 0, lockedUntil: 0 };
+  try {
+    const raw = window.localStorage.getItem(LOCKOUT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<LockoutState>;
+      return {
+        failedAttempts: typeof parsed.failedAttempts === 'number' ? parsed.failedAttempts : 0,
+        lockedUntil: typeof parsed.lockedUntil === 'number' ? parsed.lockedUntil : 0,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return { failedAttempts: 0, lockedUntil: 0 };
+}
+
+function saveLockoutState(state: LockoutState): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LOCKOUT_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+export function getRemainingLockoutSeconds(): number {
+  const state = loadLockoutState();
+  const now = Date.now();
+  if (state.lockedUntil > now) {
+    return Math.ceil((state.lockedUntil - now) / 1000);
+  }
+  return 0;
+}
+
+export function resetAccessLockout(): void {
+  saveLockoutState({ failedAttempts: 0, lockedUntil: 0 });
+}
+
 export async function verifyAndUnlockAccessCode(code: string): Promise<boolean> {
+  if (getRemainingLockoutSeconds() > 0) {
+    return false;
+  }
+
   const normalized = normalizeAccessCode(code);
   if (!normalized) return false;
 
-  // 1. Verify against build-time SHA-256 access code hash
-  const expectedHash = typeof __ACCESS_CODE_HASH__ !== 'undefined' ? __ACCESS_CODE_HASH__ : '';
-  if (expectedHash) {
-    const actualHash = await hashAccessCode(normalized);
-    if (actualHash !== expectedHash) {
+  const hasVerifier = typeof __ACCESS_CODE_VERIFIER__ !== 'undefined' && Boolean(__ACCESS_CODE_VERIFIER__);
+  if (hasVerifier) {
+    const valid = await verifySaltedAccessVerifier(normalized);
+    if (!valid) {
+      recordFailedAttempt();
       return false;
     }
   }
 
-  // 2. Decrypt the Gemini API key vault if present
   const decryptedKey = await decryptGeminiVault(normalized);
   if (decryptedKey) {
     unlockedRuntimeGeminiKey = decryptedKey;
-  } else if (!expectedHash) {
+  } else if (!hasVerifier) {
+    recordFailedAttempt();
     return false;
   }
 
+  resetAccessLockout();
   try {
-    window.localStorage.setItem(ACCESS_STORAGE_KEY, normalized);
+    window.sessionStorage.setItem(ACCESS_SESSION_KEY, normalized);
   } catch {
     // ignore storage errors
   }
   return true;
 }
 
+function recordFailedAttempt(): void {
+  const state = loadLockoutState();
+  const nextAttempts = state.failedAttempts + 1;
+  if (nextAttempts >= MAX_FAILED_ATTEMPTS) {
+    saveLockoutState({
+      failedAttempts: nextAttempts,
+      lockedUntil: Date.now() + LOCKOUT_DURATION_MS,
+    });
+  } else {
+    saveLockoutState({
+      failedAttempts: nextAttempts,
+      lockedUntil: 0,
+    });
+  }
+}
+
 export function lockSiteAccess(): void {
   unlockedRuntimeGeminiKey = '';
   try {
-    window.localStorage.removeItem(ACCESS_STORAGE_KEY);
+    window.sessionStorage.removeItem(ACCESS_SESSION_KEY);
+    window.localStorage.removeItem('pocket-market.site.accessCode.v1');
   } catch {
     // ignore
   }
@@ -137,7 +244,7 @@ export function lockSiteAccess(): void {
 export function getSavedAccessCode(): string {
   if (typeof window === 'undefined') return '';
   try {
-    return window.localStorage.getItem(ACCESS_STORAGE_KEY) ?? '';
+    return window.sessionStorage.getItem(ACCESS_SESSION_KEY) ?? '';
   } catch {
     return '';
   }
@@ -149,14 +256,16 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [err, setErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Check on mount if a previously saved access code or URL ?code= param unlocks the site
+  // Check on mount if an active session or URL ?code= param unlocks the site
   useState(() => {
     (async () => {
       try {
+        // Clear any legacy localStorage access code from older versions
+        window.localStorage.removeItem('pocket-market.site.accessCode.v1');
+
         const params = new URLSearchParams(window.location.search);
         const urlCode = params.get('code') ?? params.get('access');
         if (urlCode && (await verifyAndUnlockAccessCode(urlCode))) {
-          // Strip the code query parameter from the address bar so it isn't left exposed
           params.delete('code');
           params.delete('access');
           const cleanSearch = params.toString();
@@ -181,6 +290,14 @@ export function AccessGate({ children }: { children: ReactNode }) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!code.trim() || submitting) return;
+
+    const lockoutSec = getRemainingLockoutSeconds();
+    if (lockoutSec > 0) {
+      const mins = Math.ceil(lockoutSec / 60);
+      setErr(`יותר מדי ניסיונות שגויים. הגישה נחסמה זמנית — נסו שוב בעוד כ-${mins} דקות.`);
+      return;
+    }
+
     setSubmitting(true);
     setErr('');
     const ok = await verifyAndUnlockAccessCode(code);
@@ -189,14 +306,19 @@ export function AccessGate({ children }: { children: ReactNode }) {
       setCode('');
       setStatus('unlocked');
     } else {
-      setErr('קוד ההרשאה שגוי. הגישה לאתר מוגבלת למשתמשים מורשים בלבד.');
+      const newLockoutSec = getRemainingLockoutSeconds();
+      if (newLockoutSec > 0) {
+        setErr('יותר מדי ניסיונות שגויים. הגישה נחסמה ל-15 דקות מטעמי אבטחה.');
+      } else {
+        setErr('קוד ההרשאה שגוי. הגישה לאתר מוגבלת למשתמשים מורשים בלבד.');
+      }
     }
   }
 
   if (status === 'checking') {
     return (
       <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: '75vh' }}>
-        <p className="loading">בודק הרשאת גישה… 🔒</p>
+        <p className="loading">בודק הרשאת גישה מאובטחת… 🔒</p>
       </div>
     );
   }
@@ -219,7 +341,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
               <span>קוד הרשאה</span>
               <input
                 type="password"
-                autoComplete="current-password"
+                autoComplete="off"
                 placeholder="הזינו קוד הרשאה..."
                 value={code}
                 onChange={(e) => {
@@ -236,7 +358,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
               </p>
             )}
             <button type="submit" className="btn btn--primary btn--lg" disabled={submitting}>
-              {submitting ? 'מאמת קוד…' : '🔓 כניסה לאתר'}
+              {submitting ? 'מאמת הצפנה…' : '🔓 כניסה מאובטחת'}
             </button>
           </form>
         </section>
